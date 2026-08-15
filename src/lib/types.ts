@@ -6,16 +6,19 @@ export type SpotCategory =
   | "birdwatching"
   | "other";
 
+export type SpotSource = "official" | "user" | "osm" | "reddit";
+
 export type Spot = {
   id: string;
   name: string;
   description: string | null;
   category: SpotCategory;
-  source: "official" | "user";
+  source: SpotSource;
   status: "pending" | "verified";
   confirm_count: number;
   lat: number;
   lng: number;
   photo_url: string | null;
+  external_id: string | null;
   created_at: string;
 };

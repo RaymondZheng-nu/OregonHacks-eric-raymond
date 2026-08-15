@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
+import { submitSpot } from "@/lib/supabase/queries.client";
 import { uploadSpotPhoto } from "@/lib/supabase/storage";
 import { CATEGORY_OPTIONS } from "@/lib/categories";
 import type { SpotCategory } from "@/lib/types";
@@ -62,19 +62,14 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
         photoUrl = await uploadSpotPhoto(photoFile);
       }
 
-      const supabase = createClient();
-      const { error } = await supabase.from("spots").insert({
+      await submitSpot({
         name,
         description: description || null,
         category,
-        source: "user",
-        status: "pending",
         lat: parseFloat(lat),
         lng: parseFloat(lng),
         photo_url: photoUrl,
       });
-
-      if (error) throw new Error(error.message);
 
       toast.success(`${name} submitted for review — check "Review submissions" to confirm it`);
       setOpen(false);

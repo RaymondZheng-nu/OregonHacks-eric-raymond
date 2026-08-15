@@ -2,12 +2,18 @@
   "name": "oregonhacks-eric-raymond",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "node --env-file=.env.local scripts/seed.mjs"
+    "seed": "node --env-file=.env.local scripts/seed.mjs",
+    "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs",
+    "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs",
+    "ingest:socrata": "node --env-file=.env.local scripts/ingest-socrata.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

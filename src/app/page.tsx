@@ -1,25 +1,11 @@
 import { ExploreView } from "@/components/explore-view";
-import { createClient } from "@/lib/supabase/server";
-import type { Spot } from "@/lib/types";
+import { getVerifiedSpots, getPendingCount } from "@/lib/supabase/queries.server";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const [{ data: spots }, { count: pendingCount }] = await Promise.all([
-    supabase
-      .from("spots")
-      .select("*")
-      .eq("status", "verified")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("spots")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pending"),
+  const [spots, pendingCount] = await Promise.all([
+    getVerifiedSpots(),
+    getPendingCount(),
   ]);
 
-  return (
-    <ExploreView
-      initialSpots={(spots ?? []) as Spot[]}
-      pendingCount={pendingCount ?? 0}
-    />
-  );
+  return <ExploreView initialSpots={spots} pendingCount={pendingCount} />;
 }

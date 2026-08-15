@@ -1,21 +1,13 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getPendingSpots } from "@/lib/supabase/queries.server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmSpotButton } from "@/components/confirm-spot-button";
 import { CATEGORY_META } from "@/lib/categories";
-import type { Spot } from "@/lib/types";
 
 export default async function PendingPage() {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("spots")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
-
-  const spots = (data ?? []) as Spot[];
+  const spots = await getPendingSpots();
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
