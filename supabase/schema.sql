@@ -38,6 +38,39 @@ returns void as $$
   where id = spot_id;
 $$ language sql;
 
+-- Speeds up the viewport bounding-box filter (status + lat/lng range) used by
+-- both the map's in-bounds query and the ingestion scripts' proximity dedup
+-- check. Without this, those queries fall back to a full scan of every
+-- verified row on every request as the table keeps growing.
+create index if not exists spots_status_lat_lng_idx on spots (status, lat, lng);
+
+-- Zoomed-out map views: instead of shipping every spot's full row (or even
+-- just lat/lng) to the client, bucket verified spots into a coarse lat/lng
+-- grid server-side and return one row per bucket with its count. Payload
+-- size is bounded by grid resolution, not by how many rows are in `spots`,
+-- so this stays cheap no matter how much ingestion grows the table.
+create or replace function spot_density_grid(
+  min_lat double precision,
+  max_lat double precision,
+  min_lng double precision,
+  max_lng double precision,
+  grid_size double precision default 0.05
+)
+returns table (lat double precision, lng double precision, count bigint)
+language sql
+stable
+as $$
+  select
+    round(spots.lat / grid_size) * grid_size as lat,
+    round(spots.lng / grid_size) * grid_size as lng,
+    count(*) as count
+  from spots
+  where status = 'verified'
+    and lat between min_lat and max_lat
+    and lng between min_lng and max_lng
+  group by 1, 2;
+$$;
+
 -- Storage bucket for spot photos. Deterministic: always ends up public,
 -- regardless of whether it already existed in some other state. Capped at
 -- 5MB and image mime types only — anon insert policy below has no other

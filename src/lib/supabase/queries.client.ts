@@ -3,6 +3,7 @@ import {
   insertSpot,
   confirmSpotRpc,
   fetchVerifiedSpotsInBounds,
+  fetchSpotDensity,
   type SubmitSpotInput,
   type SpotsInBoundsOptions,
 } from "@/lib/supabase/queries";
@@ -18,6 +19,10 @@ export async function getVerifiedSpotsInBounds(
   options?: SpotsInBoundsOptions
 ) {
   return fetchVerifiedSpotsInBounds(createClient(), bounds, options);
+}
+
+export async function getSpotDensity(bounds: BoundingBox, gridSize?: number) {
+  return fetchSpotDensity(createClient(), bounds, gridSize);
 }
 
 export async function confirmSpot(spotId: string) {

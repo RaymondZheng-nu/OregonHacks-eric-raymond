@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   fetchVerifiedSpots,
   fetchVerifiedSpotsInBounds,
+  fetchSpotDensity,
   fetchPendingSpots,
   fetchPendingCount,
   type SpotsInBoundsOptions,
@@ -17,6 +18,10 @@ export async function getVerifiedSpotsInBounds(
   options?: SpotsInBoundsOptions
 ) {
   return fetchVerifiedSpotsInBounds(await createClient(), bounds, options);
+}
+
+export async function getSpotDensity(bounds: BoundingBox, gridSize?: number) {
+  return fetchSpotDensity(await createClient(), bounds, gridSize);
 }
 
 export async function getPendingSpots() {

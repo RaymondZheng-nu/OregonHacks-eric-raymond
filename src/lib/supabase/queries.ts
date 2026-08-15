@@ -105,6 +105,34 @@ export async function fetchVerifiedSpotsInBounds(
   return (data ?? []) as Spot[];
 }
 
+export type DensityBucket = {
+  lat: number;
+  lng: number;
+  count: number;
+};
+
+const DEFAULT_DENSITY_GRID_SIZE = 0.05;
+
+// Zoomed-out map views: bucketed counts instead of individual spots, via the
+// spot_density_grid RPC (schema.sql) so payload size stays bounded by grid
+// resolution rather than by how many spots are in the table.
+export async function fetchSpotDensity(
+  supabase: SupabaseClient,
+  bounds: BoundingBox,
+  gridSize: number = DEFAULT_DENSITY_GRID_SIZE
+): Promise<DensityBucket[]> {
+  const { data, error } = await supabase.rpc("spot_density_grid", {
+    min_lat: bounds.minLat,
+    max_lat: bounds.maxLat,
+    min_lng: bounds.minLng,
+    max_lng: bounds.maxLng,
+    grid_size: gridSize,
+  });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DensityBucket[];
+}
+
 export async function fetchPendingCount(
   supabase: SupabaseClient
 ): Promise<number> {
