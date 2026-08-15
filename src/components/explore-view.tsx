@@ -50,7 +50,7 @@ export function ExploreView({
         <div>
           <h1 className="text-lg font-semibold leading-tight">
             <Link href="/about" className="hover:underline">
-              Nearby Nature
+              TOUCH GRASS
             </Link>
           </h1>
           <p className="text-sm text-muted-foreground">

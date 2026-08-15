@@ -1,5 +1,5 @@
 {
-  "name": "oregonhacks-eric-raymond",
+  "name": "touch-grass",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -13,6 +13,7 @@
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs",
     "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs",
+    "ingest:osm:cities": "node --env-file=.env.local scripts/ingest-osm-cities.mjs",
     "ingest:socrata": "node --env-file=.env.local scripts/ingest-socrata.mjs"
   },
   "dependencies": {

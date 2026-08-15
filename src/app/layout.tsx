@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nearby Nature",
+  title: "TOUCH GRASS",
   description: "Find green space and self-reported nature spots across NYC.",
 };
 
