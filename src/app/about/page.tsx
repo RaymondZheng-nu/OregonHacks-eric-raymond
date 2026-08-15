@@ -24,21 +24,24 @@ const STEPS = [
   },
 ];
 
+// Placeholder photography (not real photos of these locations) illustrating
+// the three kinds of spots on the map — captions describe the category, not
+// the specific image content.
 const HIGHLIGHTS = [
   {
     seed: "central-park",
     label: "Official park data",
-    alt: "A wide green lawn in Central Park",
+    alt: "Placeholder photo representing official park data",
   },
   {
     seed: "rat-rock",
     label: "Self-reported spots",
-    alt: "A large boulder used for outdoor climbing in Central Park",
+    alt: "Placeholder photo representing a self-reported spot",
   },
   {
     seed: "jamaica-bay",
     label: "Niche activities",
-    alt: "Wetlands at the Jamaica Bay Wildlife Refuge",
+    alt: "Placeholder photo representing a niche outdoor activity",
   },
 ];
 
@@ -58,7 +61,7 @@ export default function AboutPage() {
         title="Nature is closer than your subway stop."
         description="Find real parks, gardens, and quiet nature spots across New York City, verified by the people who actually visit them."
         landscapeImage="https://picsum.photos/seed/central-park-hero/1600/800"
-        landscapeAlt="A wide green lawn in Central Park"
+        landscapeAlt="Placeholder landscape photo of a green park"
         animation="subtle"
         primaryCTA={{ ctaEnabled: true, text: "Open the map", link: "/" }}
       />

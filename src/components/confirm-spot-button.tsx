@@ -22,6 +22,10 @@ export function ConfirmSpotButton({ spotId }: { spotId: string }) {
   const router = useRouter();
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Guards against double-submission in the brief window between mount and
+  // the localStorage check below resolving — the button stays disabled until
+  // hydration for this specific spotId has actually completed.
+  const [hydrated, setHydrated] = useState(false);
 
   // Server-rendered HTML always has confirmed=false (no window/localStorage on
   // the server) — reading localStorage must happen post-mount, not during the
@@ -30,6 +34,7 @@ export function ConfirmSpotButton({ spotId }: { spotId: string }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfirmed(getConfirmedIds().includes(spotId));
+    setHydrated(true);
   }, [spotId]);
 
   async function handleConfirm() {
@@ -54,7 +59,7 @@ export function ConfirmSpotButton({ spotId }: { spotId: string }) {
     <Button
       size="sm"
       variant={confirmed ? "outline" : "default"}
-      disabled={confirmed || submitting}
+      disabled={!hydrated || confirmed || submitting}
       onClick={handleConfirm}
       className="transition-colors duration-200"
     >
