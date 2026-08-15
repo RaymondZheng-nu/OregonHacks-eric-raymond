@@ -48,7 +48,11 @@ export function ExploreView({
     <div className="flex h-screen w-full flex-col">
       <header className="flex flex-col gap-3 border-b bg-background px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold leading-tight">Nearby Nature</h1>
+          <h1 className="text-lg font-semibold leading-tight">
+            <Link href="/about" className="hover:underline">
+              Nearby Nature
+            </Link>
+          </h1>
           <p className="text-sm text-muted-foreground">
             {visibleSpots.length} of {initialSpots.length} green spaces & nature
             spots across NYC
