@@ -1,12 +1,26 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import type { Spot } from "@/lib/types";
+import type { Spot, SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
+import type { BoundingBox } from "@/lib/geo";
+import { getVerifiedSpotsInBounds, getSpotDensity } from "@/lib/supabase/queries.client";
 
 const NYC_CENTER: [number, number] = [40.7484, -73.9857];
+const DEFAULT_ZOOM = 11;
+
+// Below this zoom, the viewport is wide enough (multi-city/state/country)
+// that individual pins would mean fetching and rendering thousands of DOM
+// markers — show a density heatmap instead. At or above it, a viewport
+// realistically holds a bounded number of spots worth pinning individually.
+const HEATMAP_ZOOM_THRESHOLD = 10;
+const VIEWPORT_FETCH_LIMIT = 1000;
+const MOVE_DEBOUNCE_MS = 300;
+
+type Viewport = { bounds: BoundingBox; zoom: number };
 
 function markerIcon(color: string) {
   return L.divIcon({
@@ -18,11 +32,161 @@ function markerIcon(color: string) {
   });
 }
 
-export function SpotMap({ spots }: { spots: Spot[] }) {
+function boundsFromLeaflet(bounds: L.LatLngBounds): BoundingBox {
+  return {
+    minLat: bounds.getSouth(),
+    maxLat: bounds.getNorth(),
+    minLng: bounds.getWest(),
+    maxLng: bounds.getEast(),
+  };
+}
+
+// Reports the map's bounds/zoom on mount and after every pan/zoom, debounced
+// so a drag gesture doesn't fire a burst of queries.
+function ViewportWatcher({ onChange }: { onChange: (viewport: Viewport) => void }) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const map = useMapEvents({
+    moveend: () => scheduleReport(),
+    zoomend: () => scheduleReport(),
+  });
+
+  function scheduleReport() {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      onChange({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
+    }, MOVE_DEBOUNCE_MS);
+  }
+
+  useEffect(() => {
+    onChange({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
+
+// leaflet.heat predates ES modules/bundlers: its own source references a
+// bare global `L` instead of importing leaflet, so it can't be a static
+// top-level import (Turbopack/webpack throw "L is not defined" evaluating
+// it, since no such global exists in a bundled module scope). Loading it
+// dynamically, after explicitly exposing `window.L`, works around that.
+let heatPluginPromise: Promise<unknown> | null = null;
+function loadHeatPlugin(): Promise<unknown> {
+  if (!heatPluginPromise) {
+    (window as unknown as { L: typeof L }).L = L;
+    heatPluginPromise = import("leaflet.heat");
+  }
+  return heatPluginPromise;
+}
+
+// No official react-leaflet binding for leaflet.heat exists, so this
+// imperatively creates/tears down an L.heatLayer via useMap().
+function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
+  const map = useMap();
+  const [pluginReady, setPluginReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadHeatPlugin().then(() => {
+      if (!cancelled) setPluginReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pluginReady) return;
+    const layer = L.heatLayer(points, { radius: 22, blur: 28, maxZoom: HEATMAP_ZOOM_THRESHOLD });
+    layer.addTo(map);
+    return () => {
+      map.removeLayer(layer);
+    };
+  }, [map, points, pluginReady]);
+
+  return null;
+}
+
+export function SpotMap({
+  initialSpots,
+  categories,
+  onCountChange,
+}: {
+  initialSpots: Spot[];
+  categories: Set<SpotCategory>;
+  onCountChange?: (count: number) => void;
+}) {
+  const [viewport, setViewport] = useState<Viewport | null>(null);
+  const [spots, setSpots] = useState<Spot[]>(initialSpots);
+  const [densityPoints, setDensityPoints] = useState<L.HeatLatLngTuple[]>([]);
+
+  const categoryList = useMemo(
+    () => Array.from(categories).sort(),
+    [categories]
+  );
+
+  const handleViewportChange = useCallback((next: Viewport) => {
+    setViewport(next);
+  }, []);
+
+  // Refetches on every pan/zoom/category change. Category filtering only
+  // applies in individual-marker mode — the density RPC has no category
+  // param, so toggling categories while zoomed out doesn't change the
+  // heatmap. A known limitation, not a bug.
+  useEffect(() => {
+    if (!viewport) return;
+    let cancelled = false;
+
+    if (viewport.zoom >= HEATMAP_ZOOM_THRESHOLD) {
+      getVerifiedSpotsInBounds(viewport.bounds, {
+        limit: VIEWPORT_FETCH_LIMIT,
+        categories: categoryList,
+      })
+        .then((result) => {
+          if (!cancelled) setSpots(result);
+        })
+        .catch(() => {
+          // transient fetch failure: keep whatever was last shown
+        });
+    } else {
+      getSpotDensity(viewport.bounds)
+        .then((buckets) => {
+          if (!cancelled) {
+            setDensityPoints(buckets.map((b) => [b.lat, b.lng, b.count] as L.HeatLatLngTuple));
+          }
+        })
+        .catch(() => {
+          // transient fetch failure: keep whatever was last shown
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewport, categoryList]);
+
+  useEffect(() => {
+    if (!viewport) {
+      onCountChange?.(spots.length);
+      return;
+    }
+    const count =
+      viewport.zoom >= HEATMAP_ZOOM_THRESHOLD
+        ? spots.length
+        : densityPoints.reduce((sum, [, , weight]) => sum + weight, 0);
+    onCountChange?.(count);
+  }, [viewport, spots, densityPoints, onCountChange]);
+
+  const showMarkers = !viewport || viewport.zoom >= HEATMAP_ZOOM_THRESHOLD;
+
   return (
     <MapContainer
       center={NYC_CENTER}
-      zoom={11}
+      zoom={DEFAULT_ZOOM}
       scrollWheelZoom
       className="h-full w-full"
     >
@@ -30,45 +194,50 @@ export function SpotMap({ spots }: { spots: Spot[] }) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {spots.map((spot) => (
-        <Marker
-          key={spot.id}
-          position={[spot.lat, spot.lng]}
-          icon={markerIcon(CATEGORY_META[spot.category].color)}
-        >
-          <Popup>
-            <div className="w-52 space-y-1.5">
-              {spot.photo_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={spot.photo_url}
-                  alt={spot.name}
-                  className="h-24 w-full rounded object-cover"
-                />
-              )}
-              <p className="font-semibold leading-tight">{spot.name}</p>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span>{CATEGORY_META[spot.category].label}</span>
-                <span>·</span>
-                <span>
-                  {spot.source === "official" ? "NYC Open Data" : "Community spot"}
-                </span>
+      <ViewportWatcher onChange={handleViewportChange} />
+      {showMarkers ? (
+        spots.map((spot) => (
+          <Marker
+            key={spot.id}
+            position={[spot.lat, spot.lng]}
+            icon={markerIcon(CATEGORY_META[spot.category].color)}
+          >
+            <Popup>
+              <div className="w-52 space-y-1.5">
+                {spot.photo_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={spot.photo_url}
+                    alt={spot.name}
+                    className="h-24 w-full rounded object-cover"
+                  />
+                )}
+                <p className="font-semibold leading-tight">{spot.name}</p>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>{CATEGORY_META[spot.category].label}</span>
+                  <span>·</span>
+                  <span>
+                    {spot.source === "official" ? "Open data" : "Community spot"}
+                  </span>
+                </div>
+                {spot.description && (
+                  <p className="text-xs">{spot.description}</p>
+                )}
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-xs font-medium text-primary underline underline-offset-2"
+                >
+                  Get directions
+                </a>
               </div>
-              {spot.description && (
-                <p className="text-xs">{spot.description}</p>
-              )}
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block text-xs font-medium text-primary underline underline-offset-2"
-              >
-                Get directions
-              </a>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+            </Popup>
+          </Marker>
+        ))
+      ) : (
+        <HeatmapLayer points={densityPoints} />
+      )}
     </MapContainer>
   );
 }

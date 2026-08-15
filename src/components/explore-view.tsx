@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
@@ -26,11 +26,7 @@ export function ExploreView({
 }) {
   const [activeCategories, setActiveCategories] =
     useState<Set<SpotCategory>>(new Set(ALL_CATEGORIES));
-
-  const visibleSpots = useMemo(
-    () => initialSpots.filter((s) => activeCategories.has(s.category)),
-    [initialSpots, activeCategories]
-  );
+  const [visibleCount, setVisibleCount] = useState(initialSpots.length);
 
   function toggleCategory(category: SpotCategory) {
     setActiveCategories((prev) => {
@@ -57,8 +53,7 @@ export function ExploreView({
             </Link>
           </h1>
           <p className="text-sm text-muted-foreground">
-            {visibleSpots.length} of {initialSpots.length} green spaces & nature
-            spots across NYC
+            {visibleCount} green spaces & nature spots in this view
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -109,8 +104,12 @@ export function ExploreView({
         </div>
       </header>
       <main className="relative flex-1">
-        <SpotMap spots={visibleSpots} />
-        {visibleSpots.length === 0 && (
+        <SpotMap
+          initialSpots={initialSpots}
+          categories={activeCategories}
+          onCountChange={setVisibleCount}
+        />
+        {visibleCount === 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center">
             <div className="pointer-events-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:ease-out rounded-lg border bg-background/95 px-4 py-3 text-center shadow-sm backdrop-blur-xs">
               <p className="text-sm font-medium">No spots match these filters</p>
