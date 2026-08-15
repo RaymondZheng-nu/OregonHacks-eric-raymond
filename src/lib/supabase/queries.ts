@@ -16,28 +16,56 @@ export type SubmitSpotInput = {
   photo_url: string | null;
 };
 
+// PostgREST caps a single select() at 1000 rows by default. With ingestion
+// jobs now putting the table well past that, an unpaginated query silently
+// drops whichever rows fall outside the most recent 1000 by created_at —
+// which made the oldest data (the original NYC seed) disappear from the map.
+const FETCH_PAGE_SIZE = 1000;
+
 export async function fetchVerifiedSpots(
   supabase: SupabaseClient
 ): Promise<Spot[]> {
-  const { data } = await supabase
-    .from("spots")
-    .select("*")
-    .eq("status", "verified")
-    .order("created_at", { ascending: false });
+  const allSpots: Spot[] = [];
+  let from = 0;
 
-  return (data ?? []) as Spot[];
+  for (;;) {
+    const { data } = await supabase
+      .from("spots")
+      .select("*")
+      .eq("status", "verified")
+      .order("created_at", { ascending: false })
+      .range(from, from + FETCH_PAGE_SIZE - 1);
+
+    const page = (data ?? []) as Spot[];
+    allSpots.push(...page);
+    if (page.length < FETCH_PAGE_SIZE) break;
+    from += FETCH_PAGE_SIZE;
+  }
+
+  return allSpots;
 }
 
 export async function fetchPendingSpots(
   supabase: SupabaseClient
 ): Promise<Spot[]> {
-  const { data } = await supabase
-    .from("spots")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
+  const allSpots: Spot[] = [];
+  let from = 0;
 
-  return (data ?? []) as Spot[];
+  for (;;) {
+    const { data } = await supabase
+      .from("spots")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .range(from, from + FETCH_PAGE_SIZE - 1);
+
+    const page = (data ?? []) as Spot[];
+    allSpots.push(...page);
+    if (page.length < FETCH_PAGE_SIZE) break;
+    from += FETCH_PAGE_SIZE;
+  }
+
+  return allSpots;
 }
 
 export async function fetchPendingCount(
