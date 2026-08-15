@@ -14,16 +14,21 @@ create table if not exists spots (
 );
 
 -- Added for ingestion sources (OSM, open-data portals): each source's native ID,
--- so re-running an ingestion job is idempotent via the unique index below instead
--- of relying on fragile check-then-insert logic in application code.
+-- so re-running an ingestion job is idempotent via `upsert(..., { onConflict })`
+-- against the unique index below, instead of fragile check-then-insert logic.
 alter table spots add column if not exists external_id text;
 
 create index if not exists spots_category_idx on spots (category);
 create index if not exists spots_status_idx on spots (status);
 
+-- Plain unique index, not partial: Postgres already treats NULL as distinct
+-- from other NULLs in a unique index, so existing rows with external_id=NULL
+-- (all user submissions) never conflict with each other regardless. A partial
+-- index here would additionally break upsert's onConflict target, since it
+-- can't express the partial predicate as an inference clause.
+drop index if exists spots_source_external_id_key;
 create unique index if not exists spots_source_external_id_key
-  on spots (source, external_id)
-  where external_id is not null;
+  on spots (source, external_id);
 
 create or replace function confirm_spot(spot_id uuid, threshold integer default 2)
 returns void as $$

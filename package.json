@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
-    "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs"
+    "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs",
+    "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
