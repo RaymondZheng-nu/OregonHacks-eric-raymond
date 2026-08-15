@@ -8,7 +8,7 @@ const STEPS = [
     number: "01",
     icon: MapIcon,
     title: "Browse the map",
-    body: "Official NYC park and tree data, plus hidden spots people have already found and shared.",
+    body: "Official park and tree data from cities across the USA, plus hidden spots people have already found and shared.",
   },
   {
     number: "02",
@@ -57,9 +57,9 @@ export default function AboutPage() {
       </nav>
 
       <Hero05
-        tagline="For New Yorkers without a yard"
-        title="Nature is closer than your subway stop."
-        description="Find real parks, gardens, and quiet nature spots across New York City, verified by the people who actually visit them."
+        tagline="For Americans without a yard"
+        title="Nature is closer than you think."
+        description="Find real parks, gardens, and quiet nature spots across the USA, verified by the people who actually visit them."
         landscapeImage="https://picsum.photos/seed/central-park-hero/1600/800"
         landscapeAlt="Placeholder landscape photo of a green park"
         animation="subtle"
@@ -68,7 +68,7 @@ export default function AboutPage() {
 
       <section className="mx-auto max-w-[1400px] px-4 py-16">
         <h2 className="max-w-lg text-2xl font-semibold tracking-tight text-balance md:text-3xl">
-          New York has less green than you think.
+          America has less green than you think.
         </h2>
         <p className="mt-4 max-w-[65ch] text-muted-foreground text-pretty">
           If you don&apos;t have a yard, finding real nature nearby usually
