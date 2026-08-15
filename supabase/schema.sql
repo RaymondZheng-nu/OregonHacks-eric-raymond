@@ -4,7 +4,7 @@ create table if not exists spots (
   name text not null,
   description text,
   category text not null, -- 'park' | 'tree' | 'garden' | 'climbing' | 'birdwatching' | 'other'
-  source text not null default 'user', -- 'official' (NYC Open Data) | 'user' (self-reported)
+  source text not null default 'user', -- 'official' (city/state open-data portal) | 'user' (self-reported) | 'osm' (OpenStreetMap) | 'reddit' (social-sourced mention)
   status text not null default 'verified', -- 'pending' | 'verified'
   confirm_count integer not null default 0,
   lat double precision not null,
@@ -13,8 +13,17 @@ create table if not exists spots (
   created_at timestamptz not null default now()
 );
 
+-- Added for ingestion sources (OSM, open-data portals): each source's native ID,
+-- so re-running an ingestion job is idempotent via the unique index below instead
+-- of relying on fragile check-then-insert logic in application code.
+alter table spots add column if not exists external_id text;
+
 create index if not exists spots_category_idx on spots (category);
 create index if not exists spots_status_idx on spots (status);
+
+create unique index if not exists spots_source_external_id_key
+  on spots (source, external_id)
+  where external_id is not null;
 
 create or replace function confirm_spot(spot_id uuid, threshold integer default 2)
 returns void as $$
