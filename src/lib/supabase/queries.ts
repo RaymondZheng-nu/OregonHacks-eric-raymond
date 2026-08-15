@@ -86,6 +86,14 @@ export async function fetchVerifiedSpotsInBounds(
 ): Promise<Spot[]> {
   const { limit = DEFAULT_BOUNDS_LIMIT, categories } = options;
 
+  // `categories: undefined` means "no filter"; `categories: []` means "filter
+  // to nothing" and must return zero rows, not silently fall back to
+  // unfiltered — otherwise a caller that deselects every category (the map's
+  // "no categories active" state) gets every spot instead of none.
+  if (categories && categories.length === 0) {
+    return [];
+  }
+
   let query = supabase
     .from("spots")
     .select("*")
@@ -97,7 +105,7 @@ export async function fetchVerifiedSpotsInBounds(
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (categories && categories.length > 0) {
+  if (categories) {
     query = query.in("category", categories);
   }
 

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CATEGORY_META } from "@/lib/categories";
 import type { Spot, SpotCategory } from "@/lib/types";
+import type { MapMode } from "@/components/spot-map";
 import { cn } from "@/lib/utils";
 
 const SpotMap = dynamic(
@@ -27,6 +28,8 @@ export function ExploreView({
   const [activeCategories, setActiveCategories] =
     useState<Set<SpotCategory>>(new Set(ALL_CATEGORIES));
   const [visibleCount, setVisibleCount] = useState(initialSpots.length);
+  const [mapMode, setMapMode] = useState<MapMode>("markers");
+  const isHeatmapMode = mapMode === "heatmap";
 
   function toggleCategory(category: SpotCategory) {
     setActiveCategories((prev) => {
@@ -57,39 +60,52 @@ export function ExploreView({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div
-            className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
-            role="group"
-            aria-label="Filter by category"
-          >
-            {Object.entries(CATEGORY_META).map(([key, meta]) => {
-              const category = key as SpotCategory;
-              const active = activeCategories.has(category);
-              return (
-                <Badge
-                  key={key}
-                  variant="outline"
-                  render={
-                    <button
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => toggleCategory(category)}
-                    />
-                  }
-                  className={cn(
-                    "h-7 shrink-0 cursor-pointer select-none px-3 transition-[opacity,transform,background-color,color] duration-200 ease-out motion-safe:active:scale-95",
-                    !active && "opacity-40"
-                  )}
-                  style={{
-                    borderColor: meta.color,
-                    color: active ? meta.color : undefined,
-                    backgroundColor: active ? `${meta.color}1a` : undefined,
-                  }}
-                >
-                  {meta.label}
-                </Badge>
-              );
-            })}
+          <div className="flex flex-col gap-1">
+            <div
+              className={cn(
+                "flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0",
+                isHeatmapMode && "opacity-50"
+              )}
+              role="group"
+              aria-label="Filter by category"
+              aria-disabled={isHeatmapMode}
+            >
+              {Object.entries(CATEGORY_META).map(([key, meta]) => {
+                const category = key as SpotCategory;
+                const active = activeCategories.has(category);
+                return (
+                  <Badge
+                    key={key}
+                    variant="outline"
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={active}
+                        disabled={isHeatmapMode}
+                        onClick={() => toggleCategory(category)}
+                      />
+                    }
+                    className={cn(
+                      "h-7 shrink-0 select-none px-3 transition-[opacity,transform,background-color,color] duration-200 ease-out",
+                      isHeatmapMode ? "cursor-not-allowed" : "cursor-pointer motion-safe:active:scale-95",
+                      !active && "opacity-40"
+                    )}
+                    style={{
+                      borderColor: meta.color,
+                      color: active ? meta.color : undefined,
+                      backgroundColor: active ? `${meta.color}1a` : undefined,
+                    }}
+                  >
+                    {meta.label}
+                  </Badge>
+                );
+              })}
+            </div>
+            {isHeatmapMode && (
+              <p className="text-xs text-muted-foreground">
+                Zoom in to filter by category
+              </p>
+            )}
           </div>
           <Button
             variant="outline"
@@ -107,15 +123,29 @@ export function ExploreView({
         <SpotMap
           initialSpots={initialSpots}
           categories={activeCategories}
-          onCountChange={setVisibleCount}
+          onViewChange={({ count, mode }) => {
+            setVisibleCount(count);
+            setMapMode(mode);
+          }}
         />
         {visibleCount === 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center">
             <div className="pointer-events-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:ease-out rounded-lg border bg-background/95 px-4 py-3 text-center shadow-sm backdrop-blur-xs">
-              <p className="text-sm font-medium">No spots match these filters</p>
-              <p className="text-xs text-muted-foreground">
-                Turn a category back on above to see it on the map.
-              </p>
+              {isHeatmapMode ? (
+                <>
+                  <p className="text-sm font-medium">No spots in this area yet</p>
+                  <p className="text-xs text-muted-foreground">
+                    Try panning to a different region.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium">No spots match these filters</p>
+                  <p className="text-xs text-muted-foreground">
+                    Turn a category back on above to see it on the map.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}

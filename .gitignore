@@ -4,6 +4,7 @@
 next-env.d.ts
 /AGENTS.md
 /CLAUDE.md
+*.tsbuildinfo
 /build
 .env*.local
 .DS_Store

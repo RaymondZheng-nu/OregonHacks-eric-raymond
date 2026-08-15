@@ -19,7 +19,12 @@ create table if not exists spots (
 alter table spots add column if not exists external_id text;
 
 create index if not exists spots_category_idx on spots (category);
-create index if not exists spots_status_idx on spots (status);
+
+-- spots_status_idx (status) is superseded by spots_status_lat_lng_idx below,
+-- whose leading column is also `status` — any query the single-column index
+-- served can use the composite index's prefix instead, so keeping both would
+-- just be two B-trees to maintain on every write for no read benefit.
+drop index if exists spots_status_idx;
 
 -- Plain unique index, not partial: Postgres already treats NULL as distinct
 -- from other NULLs in a unique index, so existing rows with external_id=NULL
@@ -60,15 +65,21 @@ returns table (lat double precision, lng double precision, count bigint)
 language sql
 stable
 as $$
+  -- Floored at 0.005 degrees (~500m): this RPC is reachable directly with
+  -- the anon key (no RLS on this table), so grid_size can't be trusted as
+  -- given. Unfloored, 0 divides by zero and a near-zero value produces
+  -- close to one bucket per row, defeating the bounded-payload guarantee
+  -- this function exists for. `limit` below is a second, independent cap.
   select
-    round(spots.lat / grid_size) * grid_size as lat,
-    round(spots.lng / grid_size) * grid_size as lng,
+    round(spots.lat / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lat,
+    round(spots.lng / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lng,
     count(*) as count
   from spots
   where status = 'verified'
     and lat between min_lat and max_lat
     and lng between min_lng and max_lng
-  group by 1, 2;
+  group by 1, 2
+  limit 5000;
 $$;
 
 -- Storage bucket for spot photos. Deterministic: always ends up public,

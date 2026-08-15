@@ -20,6 +20,7 @@ const HEATMAP_ZOOM_THRESHOLD = 10;
 const VIEWPORT_FETCH_LIMIT = 1000;
 const MOVE_DEBOUNCE_MS = 300;
 
+export type MapMode = "markers" | "heatmap";
 type Viewport = { bounds: BoundingBox; zoom: number };
 
 function markerIcon(color: string) {
@@ -42,28 +43,41 @@ function boundsFromLeaflet(bounds: L.LatLngBounds): BoundingBox {
 }
 
 // Reports the map's bounds/zoom on mount and after every pan/zoom, debounced
-// so a drag gesture doesn't fire a burst of queries.
+// so a drag gesture doesn't fire a burst of queries. `onChange` is wrapped in
+// a ref so the moveend/zoomend handlers object passed to useMapEvents keeps a
+// stable identity across renders — otherwise react-leaflet tears down and
+// re-adds the native Leaflet listeners on every re-render of this component.
 function ViewportWatcher({ onChange }: { onChange: (viewport: Viewport) => void }) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const map = useMapEvents({
-    moveend: () => scheduleReport(),
-    zoomend: () => scheduleReport(),
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
   });
 
-  function scheduleReport() {
+  const scheduleReport = useCallback((map: L.Map) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      onChange({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
+      onChangeRef.current({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
     }, MOVE_DEBOUNCE_MS);
-  }
+  }, []);
+
+  const handlers = useMemo(
+    () => ({
+      moveend: () => scheduleReport(map),
+      zoomend: () => scheduleReport(map),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `map` below is assigned after this memo runs but closed over by reference; both fire only on real Leaflet events, well after `map` is set.
+    [scheduleReport]
+  );
+
+  const map = useMapEvents(handlers);
 
   useEffect(() => {
-    onChange({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
+    onChangeRef.current({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: fires once with the map's initial bounds, independent of prop identity.
   }, []);
 
   return null;
@@ -78,7 +92,13 @@ let heatPluginPromise: Promise<unknown> | null = null;
 function loadHeatPlugin(): Promise<unknown> {
   if (!heatPluginPromise) {
     (window as unknown as { L: typeof L }).L = L;
-    heatPluginPromise = import("leaflet.heat");
+    heatPluginPromise = import("leaflet.heat").catch((error) => {
+      // Don't cache a failed load — a transient network/chunk error would
+      // otherwise permanently disable the heatmap for the rest of the
+      // session, since every future mount would await the same dead promise.
+      heatPluginPromise = null;
+      throw error;
+    });
   }
   return heatPluginPromise;
 }
@@ -91,9 +111,13 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadHeatPlugin().then(() => {
-      if (!cancelled) setPluginReady(true);
-    });
+    loadHeatPlugin()
+      .then(() => {
+        if (!cancelled) setPluginReady(true);
+      })
+      .catch((error) => {
+        console.error("Failed to load heatmap plugin", error);
+      });
     return () => {
       cancelled = true;
     };
@@ -114,15 +138,25 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
 export function SpotMap({
   initialSpots,
   categories,
-  onCountChange,
+  onViewChange,
 }: {
   initialSpots: Spot[];
   categories: Set<SpotCategory>;
-  onCountChange?: (count: number) => void;
+  onViewChange?: (info: { count: number; mode: MapMode }) => void;
 }) {
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [spots, setSpots] = useState<Spot[]>(initialSpots);
   const [densityPoints, setDensityPoints] = useState<L.HeatLatLngTuple[]>([]);
+
+  // `initialSpots` (the SSR-fetched default viewport) is only authoritative
+  // until the client's first real viewport-driven fetch resolves — after
+  // that, resyncing from a later prop change would clobber whatever the user
+  // has since panned/zoomed to. Before that point, still-mounted-but-not-yet-
+  // fetched, a new `initialSpots` (e.g. from router.refresh()) should apply.
+  const hasFetchedRef = useRef(false);
+  useEffect(() => {
+    if (!hasFetchedRef.current) setSpots(initialSpots);
+  }, [initialSpots]);
 
   const categoryList = useMemo(
     () => Array.from(categories).sort(),
@@ -133,55 +167,70 @@ export function SpotMap({
     setViewport(next);
   }, []);
 
-  // Refetches on every pan/zoom/category change. Category filtering only
-  // applies in individual-marker mode — the density RPC has no category
-  // param, so toggling categories while zoomed out doesn't change the
-  // heatmap. A known limitation, not a bug.
-  useEffect(() => {
-    if (!viewport) return;
-    let cancelled = false;
+  const mode: MapMode =
+    !viewport || viewport.zoom >= HEATMAP_ZOOM_THRESHOLD ? "markers" : "heatmap";
 
-    if (viewport.zoom >= HEATMAP_ZOOM_THRESHOLD) {
-      getVerifiedSpotsInBounds(viewport.bounds, {
-        limit: VIEWPORT_FETCH_LIMIT,
-        categories: categoryList,
-      })
-        .then((result) => {
-          if (!cancelled) setSpots(result);
-        })
-        .catch(() => {
-          // transient fetch failure: keep whatever was last shown
-        });
-    } else {
-      getSpotDensity(viewport.bounds)
-        .then((buckets) => {
-          if (!cancelled) {
-            setDensityPoints(buckets.map((b) => [b.lat, b.lng, b.count] as L.HeatLatLngTuple));
-          }
-        })
-        .catch(() => {
-          // transient fetch failure: keep whatever was last shown
-        });
+  // No categories selected means "show nothing" — derived directly at render
+  // time rather than via setState in the effect below, so there's no need to
+  // dispatch a fetch (or a state update) just to represent an empty result.
+  const noCategoriesSelected = categoryList.length === 0;
+  const visibleSpots = noCategoriesSelected ? [] : spots;
+
+  // Individual-marker mode: refetches on pan/zoom/category change.
+  useEffect(() => {
+    if (!viewport || mode !== "markers") return;
+
+    if (noCategoriesSelected) {
+      hasFetchedRef.current = true;
+      onViewChange?.({ count: 0, mode: "markers" });
+      return;
     }
+
+    let cancelled = false;
+    getVerifiedSpotsInBounds(viewport.bounds, {
+      limit: VIEWPORT_FETCH_LIMIT,
+      categories: categoryList,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        hasFetchedRef.current = true;
+        setSpots(result);
+        onViewChange?.({ count: result.length, mode: "markers" });
+      })
+      .catch((error) => {
+        console.error("Failed to fetch spots in bounds", error);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [viewport, categoryList]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded: it's a per-render prop from the parent, not something a refetch should be keyed on.
+  }, [viewport, mode, categoryList]);
 
+  // Heatmap mode: the density RPC has no category param (deliberately — see
+  // schema.sql), so this only depends on viewport, not categoryList. Toggling
+  // a category badge while zoomed out is a documented no-op, not a bug.
   useEffect(() => {
-    if (!viewport) {
-      onCountChange?.(spots.length);
-      return;
-    }
-    const count =
-      viewport.zoom >= HEATMAP_ZOOM_THRESHOLD
-        ? spots.length
-        : densityPoints.reduce((sum, [, , weight]) => sum + weight, 0);
-    onCountChange?.(count);
-  }, [viewport, spots, densityPoints, onCountChange]);
+    if (!viewport || mode !== "heatmap") return;
+    let cancelled = false;
 
-  const showMarkers = !viewport || viewport.zoom >= HEATMAP_ZOOM_THRESHOLD;
+    getSpotDensity(viewport.bounds)
+      .then((buckets) => {
+        if (cancelled) return;
+        const points = buckets.map((b) => [b.lat, b.lng, b.count] as L.HeatLatLngTuple);
+        setDensityPoints(points);
+        const total = buckets.reduce((sum, b) => sum + b.count, 0);
+        onViewChange?.({ count: total, mode: "heatmap" });
+      })
+      .catch((error) => {
+        console.error("Failed to fetch spot density", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded, see marker-mode effect above.
+  }, [viewport, mode]);
 
   return (
     <MapContainer
@@ -195,8 +244,8 @@ export function SpotMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ViewportWatcher onChange={handleViewportChange} />
-      {showMarkers ? (
-        spots.map((spot) => (
+      {mode === "markers" ? (
+        visibleSpots.map((spot) => (
           <Marker
             key={spot.id}
             position={[spot.lat, spot.lng]}
