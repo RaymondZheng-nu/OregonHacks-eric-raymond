@@ -37,7 +37,7 @@ export function SpotMap({ spots }: { spots: Spot[] }) {
           icon={markerIcon(CATEGORY_META[spot.category].color)}
         >
           <Popup>
-            <div className="w-48 space-y-1">
+            <div className="w-52 space-y-1.5">
               {spot.photo_url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -47,12 +47,24 @@ export function SpotMap({ spots }: { spots: Spot[] }) {
                 />
               )}
               <p className="font-semibold leading-tight">{spot.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {CATEGORY_META[spot.category].label}
-              </p>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>{CATEGORY_META[spot.category].label}</span>
+                <span>·</span>
+                <span>
+                  {spot.source === "official" ? "NYC Open Data" : "Community spot"}
+                </span>
+              </div>
               {spot.description && (
                 <p className="text-xs">{spot.description}</p>
               )}
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-xs font-medium text-primary underline underline-offset-2"
+              >
+                Get directions
+              </a>
             </div>
           </Popup>
         </Marker>

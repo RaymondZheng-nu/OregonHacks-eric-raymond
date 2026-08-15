@@ -25,10 +25,14 @@ export default async function PendingPage() {
             Review submissions
           </h1>
           <p className="text-sm text-muted-foreground">
-            New spots wait here until the community confirms they're real.
+            New spots wait here until the community confirms they&apos;re real.
           </p>
         </div>
-        <Button variant="outline" render={<Link href="/">Back to map</Link>} />
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={<Link href="/">Back to map</Link>}
+        />
       </div>
 
       {spots.length === 0 && (
