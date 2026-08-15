@@ -49,7 +49,7 @@ export default function AboutPage() {
   return (
     <div className="min-h-[100dvh]">
       <nav className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4">
-        <span className="font-semibold">Nearby Nature</span>
+        <span className="font-logo tracking-tight text-green-700">TOUCH GRASS</span>
         <Button
           nativeButton={false}
           render={<Link href="/">Open the map</Link>}
@@ -72,7 +72,7 @@ export default function AboutPage() {
         </h2>
         <p className="mt-4 max-w-[65ch] text-muted-foreground text-pretty">
           If you don&apos;t have a yard, finding real nature nearby usually
-          means guessing. Nearby Nature turns official city data and real
+          means guessing. TOUCH GRASS turns official city data and real
           reports into one map.
         </p>
       </section>

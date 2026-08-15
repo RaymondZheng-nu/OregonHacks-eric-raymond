@@ -1,9 +1,9 @@
-# Nearby Nature
+# TOUCH GRASS
 
 Built for OregonHacks 2026.
 theme: *build tech that helps people connect with nature or supports environmental health*.
 
-For NYC apartment-dwellers with no yard, "go outside" isn't always obvious. Nearby Nature is a map that combines official city green-space data with spots the community has actually found worth visiting — parks, quiet gardens, birdwatching corners, even outdoor climbing spots — so finding a piece of nature nearby takes one look, not a search.
+For NYC apartment-dwellers with no yard, "go outside" isn't always obvious. TOUCH GRASS is a map that combines official city green-space data with spots the community has actually found worth visiting — parks, quiet gardens, birdwatching corners, even outdoor climbing spots — so finding a piece of nature nearby takes one look, not a search.
 
 ## Features
 
