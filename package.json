@@ -9,7 +9,8 @@
     "lint": "eslint",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs",
-    "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs"
+    "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs",
+    "ingest:socrata": "node --env-file=.env.local scripts/ingest-socrata.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
