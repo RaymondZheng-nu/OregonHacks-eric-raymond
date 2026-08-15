@@ -59,7 +59,7 @@ export function ExploreView({
           </h1>
           <p className="text-sm text-muted-foreground">
             {visibleSpots.length} of {initialSpots.length} green spaces & nature
-            spots across NYC
+            spots across the USA
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

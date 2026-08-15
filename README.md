@@ -3,11 +3,11 @@
 Built for OregonHacks 2026.
 theme: *build tech that helps people connect with nature or supports environmental health*.
 
-For NYC apartment-dwellers with no yard, "go outside" isn't always obvious. TOUCH GRASS is a map that combines official city green-space data with spots the community has actually found worth visiting — parks, quiet gardens, birdwatching corners, even outdoor climbing spots — so finding a piece of nature nearby takes one look, not a search.
+For apartment-dwellers across the USA with no yard, "go outside" isn't always obvious. TOUCH GRASS is a map that combines official city green-space data with spots the community has actually found worth visiting — parks, quiet gardens, birdwatching corners, even outdoor climbing spots — so finding a piece of nature nearby takes one look, not a search.
 
 ## Features
 
-- Interactive map of NYC green space, seeded from official park/street-tree data
+- Interactive map of green space across the USA, seeded from official park/street-tree data
 - Community-submitted "niche" spots: hidden gardens, climbing spots, birdwatching corners, tagged by category, with photos and descriptions
 - One-click "add a spot" with geolocation, no account required
 

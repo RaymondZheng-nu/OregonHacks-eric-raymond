@@ -21,7 +21,7 @@ const bungee = Bungee({
 
 export const metadata: Metadata = {
   title: "TOUCH GRASS",
-  description: "Find green space and self-reported nature spots across NYC.",
+  description: "Find green space and self-reported nature spots across the USA.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
