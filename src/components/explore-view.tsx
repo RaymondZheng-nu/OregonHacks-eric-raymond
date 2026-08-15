@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,7 +83,7 @@ export function ExploreView({
                     />
                   }
                   className={cn(
-                    "h-7 shrink-0 cursor-pointer select-none px-3 transition-[opacity,transform,background-color,color] duration-200 ease-out motion-safe:active:scale-95",
+                    "h-9 shrink-0 cursor-pointer select-none px-3.5 transition-[opacity,transform,background-color,color] duration-200 ease-out motion-safe:active:scale-95",
                     !active && "opacity-40"
                   )}
                   style={{
@@ -101,6 +102,7 @@ export function ExploreView({
             nativeButton={false}
             render={
               <Link href="/pending">
+                <ClipboardListIcon aria-hidden="true" />
                 Review submissions{pendingCount > 0 ? ` (${pendingCount})` : ""}
               </Link>
             }

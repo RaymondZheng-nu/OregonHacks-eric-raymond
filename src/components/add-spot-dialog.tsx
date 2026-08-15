@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -90,7 +91,14 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button>Add a spot</Button>} />
+      <DialogTrigger
+        render={
+          <Button>
+            <PlusIcon aria-hidden="true" />
+            Add a spot
+          </Button>
+        }
+      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Share a nature spot</DialogTitle>
@@ -118,6 +126,11 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
               <SelectContent>
                 {CATEGORY_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
+                    <span
+                      aria-hidden="true"
+                      className="inline-block size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: opt.color }}
+                    />
                     {opt.label}
                   </SelectItem>
                 ))}
