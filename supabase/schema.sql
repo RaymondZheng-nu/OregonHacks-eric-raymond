@@ -24,6 +24,33 @@ returns void as $$
   where id = spot_id;
 $$ language sql;
 
--- Storage: create a public bucket named "spot-photos" in the dashboard first, then run:
--- create policy "Public read spot-photos" on storage.objects for select using (bucket_id = 'spot-photos');
--- create policy "Anon insert spot-photos" on storage.objects for insert with check (bucket_id = 'spot-photos');
+-- Storage bucket for spot photos. Deterministic: always ends up public,
+-- regardless of whether it already existed in some other state.
+insert into storage.buckets (id, name, public)
+values ('spot-photos', 'spot-photos', true)
+on conflict (id) do update set public = true;
+
+-- Storage policies: create-if-missing via exception handling, never drop-then-create.
+-- A drop+create would momentarily remove the policy inside the same statement batch;
+-- this way there is no window where the policy is absent.
+do $$
+begin
+  create policy "Public read spot-photos" on storage.objects
+    for select using (bucket_id = 'spot-photos');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create policy "Anon insert spot-photos" on storage.objects
+    for insert with check (bucket_id = 'spot-photos');
+exception
+  when duplicate_object then null;
+end $$;
+
+-- RLS is intentionally left disabled on `spots`: there is no auth in this app, so the
+-- browser (anon key) inserts/selects/rpcs directly against this table with no session.
+-- Enabling RLS here without matching policies would silently break anonymous submission
+-- and confirmation. If auth is added post-hackathon, replace this line with real policies.
+alter table spots disable row level security;
