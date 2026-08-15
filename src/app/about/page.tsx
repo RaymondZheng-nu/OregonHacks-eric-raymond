@@ -49,7 +49,7 @@ export default function AboutPage() {
   return (
     <div className="min-h-[100dvh]">
       <nav className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4">
-        <span className="font-semibold">TOUCH GRASS</span>
+        <span className="font-logo tracking-wide text-green-700">TOUCH GRASS</span>
         <Button
           nativeButton={false}
           render={<Link href="/">Open the map</Link>}
