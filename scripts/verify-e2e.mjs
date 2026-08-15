@@ -1,5 +1,5 @@
 // Live end-to-end check of the moderation flow against the real Supabase project.
-// Run with: npm run verify:e2e  (needs .env.local — see .env.local.example)
+// Run with: npm run verify:e2e (needs .env.local, see .env.local.example)
 //
 // Uses the anon/publishable key for everything a real browser would do (that's
 // the thing actually being validated), and the service key only for cleanup,
@@ -107,8 +107,8 @@ async function main() {
     assert(readResp.ok, `photo should be publicly readable, got HTTP ${readResp.status}`);
     console.log("Photo upload + public read: ok");
 
-    // 4. Confirm twice, simulating two different browsers — the localStorage
-    // dedup guard is client-only, so the backend has no notion of caller
+    // 4. Confirm twice, simulating two different browsers. The localStorage
+    // dedup guard is client only, so the backend has no notion of caller
     // identity and this is exactly what needs to be proven end to end.
     for (let i = 1; i <= 2; i++) {
       const { error: rpcError } = await anon.rpc("confirm_spot", { spot_id: spotId });

@@ -2,8 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Spot, SpotCategory } from "@/lib/types";
 
 // Reads soft-fail to empty defaults (matches the `data ?? []` pattern the call
-// sites used before this module existed) so a page never crashes on a blip —
-// it just renders an empty state. Mutations throw, since every call site
+// sites used before this module existed) so a page never crashes on a blip.
+// It just renders an empty state. Mutations throw, since every call site
 // wraps them in try/catch and expects a rejected promise for its toast logic.
 
 export type SubmitSpotInput = {
