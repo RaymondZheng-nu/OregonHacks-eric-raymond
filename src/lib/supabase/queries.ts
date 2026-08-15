@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Spot, SpotCategory } from "@/lib/types";
+import { boundingBox, haversineDistanceMeters } from "@/lib/geo";
 
 // Reads soft-fail to empty defaults (matches the `data ?? []` pattern the call
 // sites used before this module existed) so a page never crashes on a blip.
@@ -70,4 +71,41 @@ export async function confirmSpotRpc(
 ): Promise<void> {
   const { error } = await supabase.rpc("confirm_spot", { spot_id: spotId });
   if (error) throw new Error(error.message);
+}
+
+// Cross-source dedup check for ingestion scripts: is there already a verified
+// spot within radiusMeters of this point? Scoped to status='verified' only —
+// a coincidental near-miss against an unconfirmed user submission isn't worth
+// the added complexity of deciding what to do about it (skip? auto-verify the
+// pending one?). Heuristic, not exact: two genuinely distinct close-together
+// spots could register as a false match.
+export async function findNearbySpot(
+  supabase: SupabaseClient,
+  lat: number,
+  lng: number,
+  radiusMeters = 30
+): Promise<Spot | null> {
+  const box = boundingBox(lat, lng, radiusMeters);
+  const { data } = await supabase
+    .from("spots")
+    .select("*")
+    .eq("status", "verified")
+    .gte("lat", box.minLat)
+    .lte("lat", box.maxLat)
+    .gte("lng", box.minLng)
+    .lte("lng", box.maxLng);
+
+  const candidates = (data ?? []) as Spot[];
+  let closest: Spot | null = null;
+  let closestDistance = Infinity;
+
+  for (const candidate of candidates) {
+    const distance = haversineDistanceMeters(lat, lng, candidate.lat, candidate.lng);
+    if (distance <= radiusMeters && distance < closestDistance) {
+      closest = candidate;
+      closestDistance = distance;
+    }
+  }
+
+  return closest;
 }
