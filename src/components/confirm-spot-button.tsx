@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { confirmSpot } from "@/lib/supabase/queries.client";
 
 const STORAGE_KEY = "confirmed-spots";
 
@@ -27,13 +27,13 @@ export function ConfirmSpotButton({ spotId }: { spotId: string }) {
 
   async function handleConfirm() {
     setSubmitting(true);
-    const supabase = createClient();
-    const { error } = await supabase.rpc("confirm_spot", { spot_id: spotId });
-    setSubmitting(false);
-
-    if (error) {
+    try {
+      await confirmSpot(spotId);
+    } catch {
       toast.error("Couldn't confirm this spot — try again");
       return;
+    } finally {
+      setSubmitting(false);
     }
 
     const ids = getConfirmedIds();
