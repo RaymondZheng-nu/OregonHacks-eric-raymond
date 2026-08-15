@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Spot, SpotCategory } from "@/lib/types";
-import { boundingBox, haversineDistanceMeters } from "@/lib/geo";
+import { boundingBox, haversineDistanceMeters, type BoundingBox } from "@/lib/geo";
 
 // Reads soft-fail to empty defaults (matches the `data ?? []` pattern the call
 // sites used before this module existed) so a page never crashes on a blip.
@@ -66,6 +66,43 @@ export async function fetchPendingSpots(
   }
 
   return allSpots;
+}
+
+export type SpotsInBoundsOptions = {
+  limit?: number;
+  categories?: SpotCategory[];
+};
+
+const DEFAULT_BOUNDS_LIMIT = 1000;
+
+// Viewport-scoped read for the map: only spots inside the given bounds, so
+// payload size tracks what's on screen instead of the whole table. `limit`
+// is a defensive ceiling (dense downtown viewports), not expected to bind
+// under normal panning at the zoom levels this is meant for.
+export async function fetchVerifiedSpotsInBounds(
+  supabase: SupabaseClient,
+  bounds: BoundingBox,
+  options: SpotsInBoundsOptions = {}
+): Promise<Spot[]> {
+  const { limit = DEFAULT_BOUNDS_LIMIT, categories } = options;
+
+  let query = supabase
+    .from("spots")
+    .select("*")
+    .eq("status", "verified")
+    .gte("lat", bounds.minLat)
+    .lte("lat", bounds.maxLat)
+    .gte("lng", bounds.minLng)
+    .lte("lng", bounds.maxLng)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (categories && categories.length > 0) {
+    query = query.in("category", categories);
+  }
+
+  const { data } = await query;
+  return (data ?? []) as Spot[];
 }
 
 export async function fetchPendingCount(
