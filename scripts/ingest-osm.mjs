@@ -24,8 +24,20 @@ if (!bboxArg) {
 }
 
 const [south, west, north, east] = bboxArg.replace("--bbox=", "").split(",").map(Number);
-if ([south, west, north, east].some(Number.isNaN)) {
+if ([south, west, north, east].some((n) => !Number.isFinite(n))) {
   console.error("Invalid --bbox — expected four comma-separated numbers: south,west,north,east");
+  process.exit(1);
+}
+if (south < -90 || north > 90 || south >= north) {
+  console.error("Invalid --bbox — expected -90 <= south < north <= 90");
+  process.exit(1);
+}
+if (west < -180 || west > 180 || east < -180 || east > 180) {
+  console.error("Invalid --bbox — longitude must be within -180..180");
+  process.exit(1);
+}
+if (west >= east) {
+  console.error("Invalid --bbox — antimeridian-crossing boxes (west >= east) aren't supported");
   process.exit(1);
 }
 
@@ -33,6 +45,7 @@ const supabase = createClient(url, secretKey);
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const DEDUP_RADIUS_METERS = 30;
+const FETCH_TIMEOUT_MS = 120_000;
 
 function buildQuery() {
   const box = `${south},${west},${north},${east}`;
@@ -89,6 +102,7 @@ async function main() {
       "User-Agent": "NearbyNature/1.0 (OregonHacks hackathon project)",
     },
     body: buildQuery(),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {

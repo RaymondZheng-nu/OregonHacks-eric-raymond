@@ -38,11 +38,17 @@ async function deleteRows(rows) {
   for (const row of rows) {
     if (row.photo_url) {
       const path = storagePathFromPublicUrl(row.photo_url);
-      if (path) await admin.storage.from("spot-photos").remove([path]);
+      if (path) {
+        const { error } = await admin.storage.from("spot-photos").remove([path]);
+        if (error) throw new Error(`Storage cleanup failed: ${error.message}`);
+      }
     }
   }
   const ids = rows.map((r) => r.id);
-  if (ids.length) await admin.from("spots").delete().in("id", ids);
+  if (ids.length) {
+    const { error } = await admin.from("spots").delete().in("id", ids);
+    if (error) throw new Error(`Row cleanup failed: ${error.message}`);
+  }
 }
 
 async function selfHealPreviousRuns() {
@@ -85,8 +91,16 @@ async function main() {
     console.log(`Inserted test spot ${spotId}`);
 
     // 2. Upload a tiny photo, same path as the real upload helper.
-    storagePath = `${crypto.randomUUID()}.txt`;
-    const blob = new Blob(["verify-e2e test photo"], { type: "text/plain" });
+    storagePath = `${crypto.randomUUID()}.png`;
+    // 1x1 transparent PNG — bucket now enforces allowed_mime_types, so the
+    // test upload has to be a real image mime type, not plain text.
+    const pngBytes = Uint8Array.from(
+      atob(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+      ),
+      (c) => c.charCodeAt(0)
+    );
+    const blob = new Blob([pngBytes], { type: "image/png" });
     const { error: uploadError } = await anon.storage
       .from("spot-photos")
       .upload(storagePath, blob);
@@ -97,10 +111,11 @@ async function main() {
       .from("spot-photos")
       .getPublicUrl(storagePath);
 
-    await admin
+    const { error: photoUrlError } = await admin
       .from("spots")
       .update({ photo_url: publicUrlData.publicUrl })
       .eq("id", spotId);
+    if (photoUrlError) throw new Error(`Photo URL update failed: ${photoUrlError.message}`);
 
     // 3. Confirm the public read policy actually serves the file.
     const readResp = await fetch(publicUrlData.publicUrl);

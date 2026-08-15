@@ -39,10 +39,15 @@ returns void as $$
 $$ language sql;
 
 -- Storage bucket for spot photos. Deterministic: always ends up public,
--- regardless of whether it already existed in some other state.
-insert into storage.buckets (id, name, public)
-values ('spot-photos', 'spot-photos', true)
-on conflict (id) do update set public = true;
+-- regardless of whether it already existed in some other state. Capped at
+-- 5MB and image mime types only — anon insert policy below has no other
+-- upload restriction, so this is the only backstop against abuse.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('spot-photos', 'spot-photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+on conflict (id) do update set
+  public = true,
+  file_size_limit = 5242880,
+  allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 -- Storage policies: create-if-missing via exception handling, never drop-then-create.
 -- A drop+create would momentarily remove the policy inside the same statement batch;

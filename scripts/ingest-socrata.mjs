@@ -35,6 +35,7 @@ if (!region) {
 const supabase = createClient(url, secretKey);
 
 const PAGE_SIZE = 1000;
+const FETCH_TIMEOUT_MS = 120_000;
 
 // Larger than OSM's 30m: these rows are area features (park boundaries)
 // reduced to a centroid, not points, so the centroid can land noticeably
@@ -60,6 +61,7 @@ async function fetchPage(offset) {
   const endpoint = `https://${region.domain}/resource/${region.datasetId}.json?$limit=${PAGE_SIZE}&$offset=${offset}&$order=${region.idField}`;
   const res = await fetch(endpoint, {
     headers: { "User-Agent": "NearbyNature/1.0 (OregonHacks hackathon project)" },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`Socrata request failed: HTTP ${res.status}`);
