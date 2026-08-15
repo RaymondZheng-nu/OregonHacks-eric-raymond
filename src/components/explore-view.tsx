@@ -51,7 +51,7 @@ export function ExploreView({
           <h1 className="text-lg leading-tight">
             <Link
               href="/about"
-              className="font-logo tracking-wide text-green-700 hover:opacity-90"
+              className="font-logo tracking-tight text-green-700 hover:opacity-90"
             >
               TOUCH GRASS
             </Link>
