@@ -38,6 +38,31 @@ alter table spots add column if not exists features text[];
 -- = null) instead of requiring a restore from backup.
 alter table spots add column if not exists merged_into uuid references spots(id);
 
+-- Tag schema, added alongside the cleanup pass so recategorized spots are
+-- findable/filterable instead of just hidden. Every field is either a
+-- direct measurement (size_class, from area_m2) or a direct 1:1 OSM tag
+-- mapping (amenities, accessibility) — nothing here is inferred beyond
+-- activity_fit's documented size-default-with-tag-override, and nothing is
+-- fabricated. No 'mood' column: no real data source exists for it yet.
+--
+-- size_class: 'small' | 'medium' | 'large', computed from area_m2 against
+-- per-category bands. Null when area_m2 is unknown — an honest "can't
+-- classify," not a guess.
+alter table spots add column if not exists size_class text;
+-- activity_fit: e.g. {climb} | {birdwatch} | {lounge} | {walk} | {walk,sports}.
+-- Defaults from size_class (a real measurement), overridden by real OSM
+-- tags where they'd contradict it (a tagged nature_reserve never implies
+-- "sports" regardless of size; a tagged playground/sport always does).
+alter table spots add column if not exists activity_fit text[];
+-- amenities: e.g. {water_feature,open_lawn}, straight from OSM tags present
+-- on the element itself. Sparse by design — benches/restrooms are almost
+-- always separate point features inside a polygon in OSM, not tags on the
+-- polygon, so this stays null for most rows. Never fabricated.
+alter table spots add column if not exists amenities text[];
+-- accessibility: OSM's own wheelchair=yes/no/limited tag verbatim when
+-- present, else null. Never inferred from anything else.
+alter table spots add column if not exists accessibility text;
+
 create index if not exists spots_category_idx on spots (category);
 
 -- spots_status_idx (status) is superseded by spots_status_lat_lng_idx below,

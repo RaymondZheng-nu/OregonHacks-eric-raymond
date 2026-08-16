@@ -23,5 +23,9 @@ export type Spot = {
   area_m2: number | null;
   features: string[] | null;
   merged_into: string | null;
+  size_class: "small" | "medium" | "large" | null;
+  activity_fit: string[] | null;
+  amenities: string[] | null;
+  accessibility: string | null;
   created_at: string;
 };
