@@ -91,7 +91,6 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
                   lat={spot.lat}
                   lng={spot.lng}
                   category={spot.category}
-                  draggable={false}
                 />
               )}
               <div className="absolute inset-x-0 bottom-0 z-[1001] bg-gradient-to-t from-black/70 to-transparent p-4">
