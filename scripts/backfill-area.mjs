@@ -110,28 +110,25 @@ function wayRing(element) {
 }
 
 // `out geom;` on a relation includes full geometry per member (way members
-// carry their own geometry array, same shape as a standalone way). This
-// approximates the relation's area as the sum of its "outer"-role member
-// ways, ignoring inner rings (holes) — a deliberate overestimate, not a
-// cadastral calculation: for a junk-vs-real-park size threshold, erring
-// toward "counts as bigger" on a relation with holes is the safe direction
-// (never wrongly filters something out for being too small).
-function relationAreaM2(element) {
-  const outerMembers = (element.members ?? []).filter(
-    (m) => m.type === "way" && m.role === "outer" && m.geometry
-  );
-  if (outerMembers.length === 0) return null;
+// carry their own geometry array, same shape as a standalone way). Only the
+// "outer"-role members are real boundary — ignoring inner rings (holes) is a
+// deliberate overestimate for the area math (never wrongly filters something
+// out for being too small), and each outer ring is also what the point-in-
+// polygon containment check in dedup-cleanup.mjs tests candidates against.
+function relationRings(element) {
+  return (element.members ?? [])
+    .filter((m) => m.type === "way" && m.role === "outer" && m.geometry)
+    .map((m) => m.geometry.map((p) => ({ lat: p.lat, lng: p.lon })));
+}
 
-  let total = 0;
-  for (const member of outerMembers) {
-    const ring = member.geometry.map((p) => ({ lat: p.lat, lng: p.lon }));
-    total += polygonAreaM2(ring);
-  }
-  return total;
+function relationAreaM2(rings) {
+  if (rings.length === 0) return null;
+  const total = rings.reduce((sum, ring) => sum + polygonAreaM2(ring), 0);
+  return total > 0 ? total : null;
 }
 
 async function backfillType(type, ids, batchSize, startedAt) {
-  const results = new Map(); // osmId (string) -> area_m2 | null
+  const results = new Map(); // osmId (string) -> { area_m2, rings, tags }
   const batches = chunk(ids, batchSize);
 
   for (const [index, batch] of batches.entries()) {
@@ -159,9 +156,21 @@ async function backfillType(type, ids, batchSize, startedAt) {
     }
 
     for (const element of elements) {
-      const area =
-        type === "way" ? polygonAreaM2(wayRing(element) ?? []) : relationAreaM2(element);
-      results.set(String(element.id), area && area > 0 ? area : null);
+      let rings, area;
+      if (type === "way") {
+        const ring = wayRing(element);
+        rings = ring ? [ring] : [];
+        area = ring ? polygonAreaM2(ring) : null;
+      } else {
+        rings = relationRings(element);
+        area = relationAreaM2(rings);
+      }
+
+      results.set(String(element.id), {
+        area_m2: area && area > 0 ? area : null,
+        rings,
+        tags: element.tags ?? {},
+      });
     }
 
     if (index < batches.length - 1) await sleep(PAUSE_BETWEEN_BATCHES_MS);
@@ -209,18 +218,29 @@ async function main() {
 
   for (const spot of osmSpots) {
     const parsed = parseExternalId(spot.external_id);
-    let area_m2 = null;
+    let resolved = null;
 
     if (parsed?.type === "way" && wayAreas.has(parsed.id)) {
-      area_m2 = wayAreas.get(parsed.id);
+      resolved = wayAreas.get(parsed.id);
     } else if (parsed?.type === "relation" && relationAreas.has(parsed.id)) {
-      area_m2 = relationAreas.get(parsed.id);
+      resolved = relationAreas.get(parsed.id);
     }
 
-    if (area_m2 !== null) resolvedCount++;
+    if (resolved?.area_m2 != null) resolvedCount++;
     else if (parsed?.type === "way" || parsed?.type === "relation") noGeometryCount++;
 
-    enriched.push({ id: spot.id, external_id: spot.external_id, category: spot.category, area_m2 });
+    enriched.push({
+      id: spot.id,
+      external_id: spot.external_id,
+      category: spot.category,
+      area_m2: resolved?.area_m2 ?? null,
+      // Rings feed dedup-cleanup.mjs's point-in-polygon containment check.
+      // Tags feed the size-filter's amenity/accessibility context and the
+      // activity_fit tag overrides — local intermediate data only, never
+      // written to the live DB.
+      rings: resolved?.rings ?? [],
+      tags: resolved?.tags ?? {},
+    });
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");

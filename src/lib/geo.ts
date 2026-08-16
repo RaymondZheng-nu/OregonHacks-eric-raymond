@@ -78,6 +78,28 @@ export function ringCentroidLatLng(ring: LatLng[]): LatLng | null {
   return { lat, lng };
 }
 
+// Standard even-odd ray-casting test: does `point` fall inside `ring`? Used
+// to gate the containment/dedup merge on real polygon containment instead of
+// a radius guess — a park 300m from another park's centroid but outside its
+// actual boundary is a neighbor, not a sub-feature. Same planar-projection
+// tradeoff as polygonAreaM2 above (park/city scale, not survey-grade), and
+// the same ring shape it already produces.
+export function pointInPolygon(point: LatLng, ring: LatLng[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i].lng;
+    const yi = ring[i].lat;
+    const xj = ring[j].lng;
+    const yj = ring[j].lat;
+
+    const intersects =
+      yi > point.lat !== yj > point.lat &&
+      point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
 export type GeoJsonGeometry =
   | { type: "Point"; coordinates: [number, number] }
   | { type: "Polygon"; coordinates: number[][][] }
