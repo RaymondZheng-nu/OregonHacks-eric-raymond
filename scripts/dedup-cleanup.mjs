@@ -126,12 +126,22 @@ function sqlEscape(str) {
 
 // --- size filter ----------------------------------------------------------
 
-function runSizeFilter(spots) {
+// `excludeIds` are rows already claimed as a merge child by the containment
+// pass. A row that's positively identified as a real sub-feature of a larger
+// green space (e.g. BBG's "Rock Garden") is a stronger, more specific signal
+// than "under the raw area threshold" — it gets preserved via the parent's
+// features list, not deleted as junk. Without this exclusion, a row that
+// qualifies as both would appear in both generated SQL blocks, and its final
+// live state would depend on which UPDATE happens to run last — silently
+// wrong regardless of which way that ordering falls.
+function runSizeFilter(spots, excludeIds) {
   const flagged = [];
   let noAreaDataCount = 0;
   const byCategory = {};
 
   for (const spot of spots) {
+    if (excludeIds.has(spot.id)) continue;
+
     const threshold = JUNK_AREA_THRESHOLD_M2[spot.category];
     if (threshold === undefined) continue; // exempt category
 
@@ -282,11 +292,14 @@ function main() {
 
   const spots = backup.spots.map((s) => ({ ...s, area_m2: areaById.get(s.id) ?? null }));
 
-  const sizeResult = runSizeFilter(spots);
+  // Containment runs first: its output (which rows are merge children) feeds
+  // into the size filter as an exclusion set, so the two passes produce a
+  // disjoint, ordering-independent result — see runSizeFilter's comment.
   const containmentResult = runContainment(spots);
-
   const childIds = new Set(containmentResult.groups.flatMap((g) => g.children.map((c) => c.id)));
   const totalChildren = childIds.size;
+
+  const sizeResult = runSizeFilter(spots, childIds);
 
   // --- report ---
   const report = {
@@ -360,7 +373,8 @@ function main() {
   lines.push("");
   lines.push("### Groups (largest first)");
   for (const g of report.containment.groups) {
-    lines.push(`  - "${g.parent.name}" [${g.parent.category}, ${Math.round(g.parent.area_m2)} m²] absorbs:`);
+    const parentArea = g.parent.area_m2 != null ? `${Math.round(g.parent.area_m2)} m²` : "area unknown (density match)";
+    lines.push(`  - "${g.parent.name}" [${g.parent.category}, ${parentArea}] absorbs:`);
     for (const c of g.children) {
       lines.push(`      - "${c.name}" [${c.category}] ${c.distance_m}m away, matched_by=${c.matched_by}, name_similarity=${c.name_similarity}`);
     }
