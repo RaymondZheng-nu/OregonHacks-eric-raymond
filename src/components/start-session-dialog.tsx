@@ -17,14 +17,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ACTIVITY_OPTIONS } from "@/lib/activities";
-import { CATEGORY_META } from "@/lib/categories";
+import { INTENT_OPTIONS } from "@/lib/intents";
 import { cn } from "@/lib/utils";
-import type { SpotCategory } from "@/lib/types";
 
 const MILES_TO_METERS = 1609.34;
 const MY_LOCATION_LABEL = "My current location";
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 2;
 
 async function geocodeAddress(
   address: string
@@ -52,8 +50,7 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
-  const [activity, setActivity] = useState<string | null>(null);
+  const [intent, setIntent] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [address, setAddress] = useState("");
@@ -62,31 +59,16 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
     lng: number;
   } | null>(null);
   const [maxMiles, setMaxMiles] = useState("5");
-  const [errors, setErrors] = useState<{ categories?: string; address?: string }>({});
+  const [errors, setErrors] = useState<{ intent?: string; address?: string }>({});
 
-  function toggleCategory(category: SpotCategory) {
-    setCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
-    setErrors((prev) => ({ ...prev, categories: undefined }));
-  }
-
-  function selectActivity(option: (typeof ACTIVITY_OPTIONS)[number]) {
-    const nextActivity = activity === option.value ? null : option.value;
-    setActivity(nextActivity);
-
-    if (nextActivity && option.impliesCategory) {
-      setCategories((prev) => new Set(prev).add(option.impliesCategory as SpotCategory));
-      setErrors((prev) => ({ ...prev, categories: undefined }));
-    }
+  function selectIntent(value: string) {
+    setIntent(value);
+    setErrors((prev) => ({ ...prev, intent: undefined }));
   }
 
   function goNext() {
-    if (step === 0 && categories.size === 0) {
-      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
+    if (step === 0 && !intent) {
+      setErrors((prev) => ({ ...prev, intent: "Pick one to continue" }));
       return;
     }
     setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
@@ -122,14 +104,18 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (categories.size === 0) {
-      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
+    const selected = INTENT_OPTIONS.find((option) => option.value === intent);
+    if (!selected) {
+      setErrors((prev) => ({ ...prev, intent: "Pick one to continue" }));
       return;
     }
 
     const params = new URLSearchParams();
-    params.set("cats", Array.from(categories).join(","));
-    if (activity) params.set("activity", activity);
+    // Never both: activity-based intents leave categories unset so /explore
+    // defaults to every category and activity_fit does the real filtering;
+    // category-based intents are already a precise 1:1 match on their own.
+    if (selected.kind === "activity") params.set("activity", selected.activity);
+    else params.set("cats", selected.category);
 
     if (address.trim()) {
       setSubmitting(true);
@@ -195,49 +181,10 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
           >
             {step === 0 && (
               <div className="space-y-2">
-                <Label>What are you into?</Label>
+                <Label>What&apos;s calling you outside?</Label>
                 <div className="flex flex-wrap gap-2">
-                  {Object.entries(CATEGORY_META).map(([key, meta]) => {
-                    const category = key as SpotCategory;
-                    const active = categories.has(category);
-                    return (
-                      <Badge
-                        key={key}
-                        variant="outline"
-                        render={
-                          <button
-                            type="button"
-                            aria-pressed={active}
-                            onClick={() => toggleCategory(category)}
-                          />
-                        }
-                        className={cn(
-                          "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
-                          !active && "opacity-40"
-                        )}
-                        style={{
-                          borderColor: meta.color,
-                          color: active ? meta.color : undefined,
-                          backgroundColor: active ? `${meta.color}1a` : undefined,
-                        }}
-                      >
-                        {meta.label}
-                      </Badge>
-                    );
-                  })}
-                </div>
-                {errors.categories && (
-                  <p className="text-xs text-destructive">{errors.categories}</p>
-                )}
-              </div>
-            )}
-
-            {step === 1 && (
-              <div className="space-y-2">
-                <Label>What do you want to do there? (optional)</Label>
-                <div className="flex flex-wrap gap-2">
-                  {ACTIVITY_OPTIONS.map((option) => {
-                    const active = activity === option.value;
+                  {INTENT_OPTIONS.map((option) => {
+                    const active = intent === option.value;
                     return (
                       <Badge
                         key={option.value}
@@ -246,7 +193,7 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
                           <button
                             type="button"
                             aria-pressed={active}
-                            onClick={() => selectActivity(option)}
+                            onClick={() => selectIntent(option.value)}
                           />
                         }
                         className={cn(
@@ -261,10 +208,13 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
                     );
                   })}
                 </div>
+                {errors.intent && (
+                  <p className="text-xs text-destructive">{errors.intent}</p>
+                )}
               </div>
             )}
 
-            {step === 2 && (
+            {step === 1 && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="address">Where are you?</Label>
