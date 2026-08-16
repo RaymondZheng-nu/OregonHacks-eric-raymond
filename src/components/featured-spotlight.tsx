@@ -60,7 +60,7 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
                 {verdict.tone !== "neutral" && (
                   <div
                     className={cn(
-                      "absolute top-1.5 right-1.5 z-[1001] flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white",
+                      "absolute top-1.5 right-1.5 z-[1001] flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white",
                       verdict.tone === "caution" && "bg-destructive/80",
                     )}
                   >

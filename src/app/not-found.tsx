@@ -12,11 +12,15 @@ export default function NotFound() {
         <h1 className="font-logo text-3xl tracking-tight text-green-700 md:text-4xl">
           TOUCH GRASS
         </h1>
-        <p className="mt-4 max-w-sm text-lg text-muted-foreground text-pretty">
+        <p className="mt-4 max-w-sm text-xl text-muted-foreground text-pretty">
           Looks like this page went outside and touched grass, unlike you.
         </p>
       </div>
-      <Button size="lg" nativeButton={false} render={<Link href="/">Back home</Link>} />
+      <Button
+        size="lg"
+        nativeButton={false}
+        render={<Link href="/">Back home</Link>}
+      />
     </div>
   );
 }

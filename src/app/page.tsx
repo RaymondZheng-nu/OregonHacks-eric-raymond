@@ -8,7 +8,10 @@ import { StartSessionDialog } from "@/components/start-session-dialog";
 import { StickyMobileCta } from "@/components/sticky-mobile-cta";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { getFeaturedSpots, getPendingCount } from "@/lib/supabase/queries.server";
+import {
+  getFeaturedSpots,
+  getPendingCount,
+} from "@/lib/supabase/queries.server";
 
 // First CAROUSEL_COUNT feed the hero carousel, the rest fill the grid below.
 const CAROUSEL_COUNT = 5;
@@ -52,7 +55,8 @@ export default async function LandingPage() {
               render={
                 <Link href="/pending">
                   <ClipboardListIcon aria-hidden="true" />
-                  Review submissions{pendingCount > 0 ? ` (${pendingCount})` : ""}
+                  Review submissions
+                  {pendingCount > 0 ? ` (${pendingCount})` : ""}
                 </Link>
               }
             />
@@ -66,10 +70,10 @@ export default async function LandingPage() {
           <h1 className="font-logo text-5xl tracking-tight text-green-700 md:text-7xl">
             TOUCH GRASS
           </h1>
-          <p className="mt-4 max-w-md text-lg text-muted-foreground text-pretty">
+          <p className="mt-4 max-w-md text-xl text-muted-foreground text-pretty">
             Yeah, you. Close the app, get off the couch, there&apos;s a whole
-            outside out there. Real parks and quiet spots near you, from
-            people who actually left the house to find them.
+            outside out there. Real parks and quiet spots near you, from people
+            who actually left the house to find them.
           </p>
           <div id="hero-cta" className="mt-8 flex flex-col items-start gap-4">
             <p className="text-sm font-medium text-muted-foreground">

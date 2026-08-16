@@ -22,7 +22,7 @@ export default async function PendingPage() {
     <div className="mx-auto max-w-2xl px-4 py-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold leading-tight">
+          <h1 className="text-xl font-semibold tracking-tight leading-tight">
             Review submissions
           </h1>
           <p className="text-sm text-muted-foreground">
