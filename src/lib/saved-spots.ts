@@ -36,10 +36,14 @@ export function getSavedSpots(): SavedSpot[] {
   return readJson(window.localStorage, SAVED_KEY, []);
 }
 
-export function saveSpot(spot: Spot): void {
-  if (typeof window === "undefined") return;
+// Returns whether this call actually inserted a new saved spot (false for an
+// already-saved id, a no-op). Callers that track undo history need this: an
+// unconditional "this was saved, so undo should remove it" would delete a
+// spot that was really saved in an earlier session, not by this call.
+export function saveSpot(spot: Spot): boolean {
+  if (typeof window === "undefined") return false;
   const existing = getSavedSpots();
-  if (existing.some((s) => s.id === spot.id)) return;
+  if (existing.some((s) => s.id === spot.id)) return false;
 
   const next: SavedSpot[] = [
     ...existing,
@@ -54,6 +58,7 @@ export function saveSpot(spot: Spot): void {
     },
   ];
   window.localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+  return true;
 }
 
 export function removeSavedSpot(id: string): void {

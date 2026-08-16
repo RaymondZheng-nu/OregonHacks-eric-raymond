@@ -198,9 +198,15 @@ async function main() {
     )
   );
 
+  // `and climbing_grade is null` guards against re-running this later against
+  // a newer backup and clobbering a grade that was already applied (or
+  // manually corrected) since — only ever fills a gap, never overwrites.
   const sqlLines = enriched
     .filter((e) => e.climbing_grade !== null)
-    .map((e) => `update spots set climbing_grade = '${sqlEscape(e.climbing_grade)}' where id = '${e.id}';`);
+    .map(
+      (e) =>
+        `update spots set climbing_grade = '${sqlEscape(e.climbing_grade)}' where id = '${e.id}' and climbing_grade is null;`
+    );
   const sqlOutPath = path.join(backupsDir, `climbing-grade-backfill-${timestamp}.sql`);
   writeFileSync(
     sqlOutPath,

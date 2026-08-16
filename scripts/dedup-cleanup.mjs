@@ -150,15 +150,17 @@ function computeSizeClass(category, areaM2) {
 // as separate point features inside a polygon in OSM, not tags on the
 // polygon itself, so they stay null for nearly every row — that's an honest
 // reflection of what the data has, not a bug.
-function computeAmenities(tags) {
+function computeAmenities(tags, category) {
   if (!tags) return null;
   const amenities = [];
   if (tags.natural === "water" || tags.water) amenities.push("water_feature");
   if (tags.surface === "grass") amenities.push("open_lawn");
   // leisure=sports_centre is OSM's tag for an indoor commercial facility —
   // distinguishes climbing gyms from outdoor crags/boulders, which don't
-  // carry this tag, without dropping gyms from the category entirely.
-  if (tags.leisure === "sports_centre") amenities.push("indoor_gym");
+  // carry this tag. Gated to category === "climbing": sports_centre also
+  // covers non-climbing facilities (pools, general fitness centres) that
+  // would otherwise get mislabeled "indoor_gym" too.
+  if (category === "climbing" && tags.leisure === "sports_centre") amenities.push("indoor_gym");
   return amenities.length > 0 ? amenities : null;
 }
 
@@ -225,7 +227,7 @@ function runSizeAndTagging(spots, excludeIds) {
     }
 
     const size_class = computeSizeClass(spot.category, spot.area_m2);
-    const amenities = computeAmenities(spot.tags);
+    const amenities = computeAmenities(spot.tags, spot.category);
     const accessibility = computeAccessibility(spot.tags);
     const activity_fit = computeActivityFit(spot.category, size_class, spot.tags);
 
@@ -454,7 +456,7 @@ function main() {
         lat: s.lat,
         lng: s.lng,
         external_id: s.external_id,
-        amenities: computeAmenities(s.tags),
+        amenities: computeAmenities(s.tags, s.category),
       })),
       tag_examples: taggingResult.tagged.slice(0, REPORT_EXAMPLE_CAP).map((s) => ({
         id: s.id,

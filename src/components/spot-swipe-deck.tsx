@@ -257,8 +257,13 @@ function SwipeNavBar({ savedCount }: { savedCount: number }) {
 // One entry per resolved card, oldest first — powers the undo button by
 // reversing whichever of saveSpot/skipSpot was just called and restoring the
 // spot to the front of the deck. Session-scoped only, same as the deck
-// itself (a fresh page load starts clean).
-type HistoryEntry = { spot: Spot; direction: SwipeDirection };
+// itself (a fresh page load starts clean). `savedNew` is only meaningful for
+// "right" entries — false means saveSpot was a no-op (already saved from
+// somewhere else), so undo must not call removeSavedSpot for it. In normal
+// operation this can't happen (already-saved spots never enter the deck —
+// see initialDeck below), kept as defense in depth against future code paths
+// that add cards to the deck some other way.
+type HistoryEntry = { spot: Spot; direction: SwipeDirection; savedNew: boolean };
 
 export function SpotSwipeDeck({
   spots,
@@ -269,10 +274,16 @@ export function SpotSwipeDeck({
 }) {
   // Skipped-this-session spots are excluded on mount, not re-checked live —
   // a spot skipped in an earlier /swipe visit this session shouldn't
-  // reappear if the user navigates back to the deck.
+  // reappear if the user navigates back to the deck. Already-saved spots
+  // (localStorage, persists across sessions) are excluded too: without this,
+  // a spot saved days ago can resurface in a fresh deck, a right-swipe on it
+  // is a silent no-op (saveSpot dedupes by id), and a later undo would still
+  // unconditionally remove it from the saved list — deleting a real,
+  // previously-saved spot the user never asked to remove.
   const initialDeck = useMemo(() => {
     const skipped = getSkippedSpotIds();
-    return spots.filter((spot) => !skipped.has(spot.id));
+    const saved = new Set(getSavedSpots().map((s) => s.id));
+    return spots.filter((spot) => !skipped.has(spot.id) && !saved.has(spot.id));
   }, [spots]);
 
   const [deck, setDeck] = useState<Spot[]>(initialDeck);
@@ -303,14 +314,15 @@ export function SpotSwipeDeck({
     const [top, ...rest] = deckRef.current;
     if (!top) return;
 
+    let savedNew = false;
     if (direction === "right") {
-      saveSpot(top);
-      setSavedCount((c) => c + 1);
+      savedNew = saveSpot(top);
+      if (savedNew) setSavedCount((c) => c + 1);
     } else {
       skipSpot(top.id);
     }
 
-    historyRef.current = [...historyRef.current, { spot: top, direction }];
+    historyRef.current = [...historyRef.current, { spot: top, direction, savedNew }];
     setHistory(historyRef.current);
     deckRef.current = rest;
     setDeck(rest);
@@ -322,8 +334,10 @@ export function SpotSwipeDeck({
     const last = currentHistory[currentHistory.length - 1];
 
     if (last.direction === "right") {
-      removeSavedSpot(last.spot.id);
-      setSavedCount((c) => Math.max(0, c - 1));
+      if (last.savedNew) {
+        removeSavedSpot(last.spot.id);
+        setSavedCount((c) => Math.max(0, c - 1));
+      }
     } else {
       unskipSpot(last.spot.id);
     }

@@ -111,9 +111,14 @@ export function ExploreView({
       sizeClasses: sizeClasses.size > 0 ? Array.from(sizeClasses) : undefined,
       amenities: amenities.size > 0 ? Array.from(amenities) : undefined,
       wheelchairAccessibleOnly: wheelchairAccessibleOnly || undefined,
-      climbingGrades: climbingGrades.size > 0 ? Array.from(climbingGrades) : undefined,
+      // Gated on isClimbingActive: sending a grade filter while climbing isn't
+      // an active category would require climbing_grade to match for every
+      // remaining category's rows too — those are always null, so the query
+      // would return nothing instead of just ignoring the unrelated filter.
+      climbingGrades:
+        isClimbingActive && climbingGrades.size > 0 ? Array.from(climbingGrades) : undefined,
     }),
-    [sizeClasses, amenities, wheelchairAccessibleOnly, climbingGrades]
+    [sizeClasses, amenities, wheelchairAccessibleOnly, climbingGrades, isClimbingActive]
   );
 
   function toggleCategory(category: SpotCategory) {
