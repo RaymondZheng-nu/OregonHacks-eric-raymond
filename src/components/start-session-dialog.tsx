@@ -155,7 +155,7 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
       }
     }
 
-    router.push(`/explore?${params.toString()}`);
+    router.push(`/results?${params.toString()}`);
   }
 
   return (

@@ -1,0 +1,86 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { ResultsList } from "@/components/results-list";
+import { Button } from "@/components/ui/button";
+import { getVerifiedSpotsInBounds } from "@/lib/supabase/queries.server";
+import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
+import { haversineDistanceMeters } from "@/lib/geo";
+import { shuffle } from "@/lib/utils";
+
+// Personalized/derived from quiz answers, not a page worth ranking in search
+// — same reasoning as /pending.
+export const metadata: Metadata = {
+  title: "Your Matches",
+  robots: { index: false, follow: false },
+};
+
+// A wider pool than any single map viewport needs, specifically so
+// "Refresh" on the results list has genuinely different spots to cycle
+// through instead of reshuffling the same handful every time.
+const POOL_LIMIT = 40;
+
+export default async function ResultsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const parsed = parseSearchParams(params);
+  const { center, bounds } = boundsFromSearch(parsed);
+  const hasOrigin = parsed.lat !== null && parsed.lng !== null;
+
+  const pool = await getVerifiedSpotsInBounds(bounds, {
+    limit: POOL_LIMIT,
+    categories: parsed.categories ?? undefined,
+    activity: parsed.activity,
+    picnic: parsed.picnic,
+  });
+
+  const spotsWithDistance = shuffle(pool).map((spot) => ({
+    ...spot,
+    distanceMeters: hasOrigin
+      ? haversineDistanceMeters(center.lat, center.lng, spot.lat, spot.lng)
+      : null,
+  }));
+
+  // Forwarded to the client component so it can build both the "view all on
+  // the map" link and each card's "view this one on the map" link without
+  // re-deriving the original search from scratch.
+  const exploreParams = new URLSearchParams();
+  if (parsed.categories) exploreParams.set("cats", parsed.categories.join(","));
+  if (parsed.activity) exploreParams.set("activity", parsed.activity);
+  if (parsed.picnic) exploreParams.set("picnic", "1");
+  if (hasOrigin) {
+    exploreParams.set("lat", String(parsed.lat));
+    exploreParams.set("lng", String(parsed.lng));
+    if (parsed.radiusMeters) exploreParams.set("radius", String(parsed.radiusMeters));
+  }
+
+  return (
+    <div className="min-h-[100dvh]">
+      <header className="border-b">
+        <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4">
+          <Link href="/" className="font-logo text-lg tracking-tight text-green-700">
+            TOUCH GRASS
+          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={
+              <Link href={`/explore?${exploreParams.toString()}`}>View all on the map</Link>
+            }
+          />
+        </div>
+      </header>
+      <main className="mx-auto max-w-[1400px] px-4 py-8">
+        <h1 className="font-heading text-2xl font-semibold">Your matches</h1>
+        <p className="mb-6 text-sm text-muted-foreground">
+          {spotsWithDistance.length} real spot{spotsWithDistance.length === 1 ? "" : "s"} found
+          {hasOrigin ? " near you" : " across the country"}.
+        </p>
+        <ResultsList spots={spotsWithDistance} exploreParams={exploreParams.toString()} />
+      </main>
+    </div>
+  );
+}

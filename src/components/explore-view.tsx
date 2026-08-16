@@ -39,6 +39,7 @@ export function ExploreView({
   initialActivity,
   initialPicnic,
   initialCenter,
+  focusSpotId,
 }: {
   initialSpots: Spot[];
   pendingCount: number;
@@ -46,6 +47,7 @@ export function ExploreView({
   initialActivity?: string;
   initialPicnic?: boolean;
   initialCenter?: [number, number];
+  focusSpotId?: string;
 }) {
   // Falls back to every selectable category when the questionnaire didn't
   // specify any (e.g. visiting /explore directly) — an empty initial Set
@@ -185,6 +187,7 @@ export function ExploreView({
           activity={activeActivity}
           picnic={activePicnic}
           initialCenter={initialCenter}
+          focusSpotId={focusSpotId}
           onViewChange={({ count, mode }) => {
             setVisibleCount(count);
             setMapMode(mode);

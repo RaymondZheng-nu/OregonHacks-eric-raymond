@@ -141,6 +141,7 @@ export function SpotMap({
   activity,
   picnic,
   initialCenter,
+  focusSpotId,
   onViewChange,
 }: {
   initialSpots: Spot[];
@@ -148,11 +149,18 @@ export function SpotMap({
   activity?: string;
   picnic?: boolean;
   initialCenter?: [number, number];
+  focusSpotId?: string;
   onViewChange?: (info: { count: number; mode: MapMode }) => void;
 }) {
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [spots, setSpots] = useState<Spot[]>(initialSpots);
   const [densityPoints, setDensityPoints] = useState<L.HeatLatLngTuple[]>([]);
+  // Registry of live marker instances, keyed by spot id — lets the focus
+  // effect below imperatively open one specific marker's popup once it's
+  // actually rendered, without react-leaflet exposing that as a declarative
+  // prop on <Marker>.
+  const markerRefs = useRef<Map<string, L.Marker>>(new Map());
+  const hasOpenedFocusPopupRef = useRef(false);
 
   // `initialSpots` (the SSR-fetched default viewport) is only authoritative
   // until the client's first real viewport-driven fetch resolves — after
@@ -181,6 +189,18 @@ export function SpotMap({
   // dispatch a fetch (or a state update) just to represent an empty result.
   const noCategoriesSelected = categoryList.length === 0;
   const visibleSpots = noCategoriesSelected ? [] : spots;
+
+  // Opens the focused marker's popup exactly once, as soon as it actually
+  // exists in the currently-rendered set — the results list only passes the
+  // spot's own coordinates, not a guarantee it's already in `spots`.
+  useEffect(() => {
+    if (!focusSpotId || hasOpenedFocusPopupRef.current || noCategoriesSelected) return;
+    const marker = markerRefs.current.get(focusSpotId);
+    if (marker) {
+      marker.openPopup();
+      hasOpenedFocusPopupRef.current = true;
+    }
+  }, [focusSpotId, spots, noCategoriesSelected]);
 
   // Individual-marker mode: refetches on pan/zoom/category change.
   useEffect(() => {
@@ -243,7 +263,7 @@ export function SpotMap({
   return (
     <MapContainer
       center={initialCenter ?? NYC_CENTER}
-      zoom={initialCenter ? 13 : DEFAULT_ZOOM}
+      zoom={focusSpotId ? 16 : initialCenter ? 13 : DEFAULT_ZOOM}
       scrollWheelZoom
       className="h-full w-full"
     >
@@ -258,6 +278,10 @@ export function SpotMap({
             key={spot.id}
             position={[spot.lat, spot.lng]}
             icon={markerIcon(CATEGORY_META[spot.category].color)}
+            ref={(instance) => {
+              if (instance) markerRefs.current.set(spot.id, instance);
+              else markerRefs.current.delete(spot.id);
+            }}
           >
             <Popup>
               <div className="w-52 space-y-1.5">
