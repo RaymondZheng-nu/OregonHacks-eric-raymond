@@ -48,7 +48,16 @@ async function geocodeAddress(
   return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
 }
 
-export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
+export function StartSessionDialog({
+  fullWidth,
+  large,
+}: {
+  fullWidth?: boolean;
+  // The quiz is the main entry point into the whole app — the hero CTA on
+  // the landing page uses this to stand out from every other button on the
+  // page, while the sticky mobile bar (constrained height) stays default.
+  large?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -162,7 +171,14 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
-          <Button size="lg" className={fullWidth ? "w-full" : undefined}>
+          <Button
+            size="lg"
+            className={cn(
+              fullWidth && "w-full",
+              large &&
+                "h-auto px-8 py-4 text-2xl font-bold tracking-tight transition-transform duration-200 ease-out hover:scale-[1.02]"
+            )}
+          >
             Take a quiz
           </Button>
         }

@@ -71,17 +71,17 @@ export default async function LandingPage() {
             outside out there. Real parks and quiet spots near you, from
             people who actually left the house to find them.
           </p>
-          <div id="hero-cta" className="mt-6 flex flex-col items-start gap-2">
+          <div id="hero-cta" className="mt-8 flex flex-col items-start gap-4">
             <p className="text-sm font-medium text-muted-foreground">
               Feeling adventurous?
             </p>
-            <StartSessionDialog />
-            <Link
-              href="/explore"
-              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-            >
-              Or browse the full map
-            </Link>
+            <StartSessionDialog large />
+            <Button
+              variant="outline"
+              size="lg"
+              nativeButton={false}
+              render={<Link href="/explore">Or browse the full map</Link>}
+            />
           </div>
         </div>
 
