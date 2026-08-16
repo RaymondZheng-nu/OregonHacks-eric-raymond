@@ -3,6 +3,7 @@ import {
   fetchVerifiedSpots,
   fetchVerifiedSpotsInBounds,
   fetchSpotDensity,
+  fetchFeaturedSpots,
   fetchPendingSpots,
   fetchPendingCount,
   fetchDistinctAmenities,
@@ -24,6 +25,10 @@ export async function getVerifiedSpotsInBounds(
 
 export async function getSpotDensity(bounds: BoundingBox, gridSize?: number) {
   return fetchSpotDensity(await createClient(), bounds, gridSize);
+}
+
+export async function getFeaturedSpots(limit: number) {
+  return fetchFeaturedSpots(await createClient(), limit);
 }
 
 export async function getPendingSpots() {

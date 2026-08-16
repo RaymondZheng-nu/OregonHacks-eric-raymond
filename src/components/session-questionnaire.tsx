@@ -6,7 +6,14 @@ import { toast } from "sonner";
 import { CompassIcon, Footprints, Bike, Car, TrainFront } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CATEGORY_META } from "@/lib/categories";
@@ -60,8 +67,13 @@ async function geocodeAddress(
   return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
 }
 
-export function SessionQuestionnaire() {
+// Dialog-wrapped questionnaire — same trigger/API shape as the old
+// StartSessionDialog (fullWidth prop, "Start session" trigger button, so
+// sticky-mobile-cta.tsx's usage carries over unchanged), but with a richer
+// form (transport mode + travel time, not just a flat miles radius).
+export function SessionQuestionnaire({ fullWidth }: { fullWidth?: boolean }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -142,12 +154,19 @@ export function SessionQuestionnaire() {
   }
 
   return (
-    <Card className="mx-auto w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="text-xl">Find spots near you</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-5">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button size="lg" className={fullWidth ? "w-full" : undefined}>
+            Start session
+          </Button>
+        }
+      />
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Find spots near you</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>What are you into?</Label>
             <div className="flex flex-wrap gap-2">
@@ -269,11 +288,13 @@ export function SessionQuestionnaire() {
             </div>
           )}
 
-          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-            {submitting ? "Finding spots…" : "Find my spots"}
-          </Button>
+          <DialogFooter>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Finding spots…" : "Find my spots"}
+            </Button>
+          </DialogFooter>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 }

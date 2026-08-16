@@ -45,6 +45,27 @@ export async function fetchVerifiedSpots(
   return allSpots;
 }
 
+// Queried directly by "has a photo" rather than pulling fetchVerifiedSpots()
+// and slicing client-side: that table is well past Supabase's 1000-row
+// response cap, and ordering by created_at desc means the oldest rows (the
+// original seeded parks, which are the ones with real photos) fall outside
+// the returned window entirely once total verified spots exceeds 1000.
+export async function fetchFeaturedSpots(
+  supabase: SupabaseClient,
+  limit: number
+): Promise<Spot[]> {
+  const { data } = await supabase
+    .from("spots")
+    .select("*")
+    .eq("status", "verified")
+    .not("photo_url", "is", null)
+    .not("photo_url", "ilike", "%picsum.photos%")
+    .order("confirm_count", { ascending: false })
+    .limit(limit);
+
+  return (data ?? []) as Spot[];
+}
+
 export async function fetchPendingSpots(
   supabase: SupabaseClient
 ): Promise<Spot[]> {

@@ -28,7 +28,13 @@ import { uploadSpotPhoto } from "@/lib/supabase/storage";
 import { CATEGORY_OPTIONS } from "@/lib/categories";
 import type { SpotCategory } from "@/lib/types";
 
-export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
+export function AddSpotDialog({
+  onSubmitted,
+  triggerSize,
+}: {
+  onSubmitted?: () => void;
+  triggerSize?: "default" | "sm" | "lg";
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -98,7 +104,7 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button>
+          <Button size={triggerSize}>
             <PlusIcon aria-hidden="true" />
             Add a spot
           </Button>
