@@ -66,6 +66,18 @@ export function polygonAreaM2(ring: LatLng[]): number {
   return Math.abs(twiceArea) / 2;
 }
 
+// Unweighted average of a {lat,lng}-shaped ring's vertices — same
+// good-enough-for-a-pin approximation as ringCentroid below, but for OSM's
+// point shape rather than GeoJSON's [lng,lat] tuples (used when Overpass
+// geometry replaces the `center` field, which can't be requested together
+// with `out geom`).
+export function ringCentroidLatLng(ring: LatLng[]): LatLng | null {
+  if (!ring || ring.length === 0) return null;
+  const lat = ring.reduce((sum, point) => sum + point.lat, 0) / ring.length;
+  const lng = ring.reduce((sum, point) => sum + point.lng, 0) / ring.length;
+  return { lat, lng };
+}
+
 export type GeoJsonGeometry =
   | { type: "Point"; coordinates: [number, number] }
   | { type: "Polygon"; coordinates: number[][][] }
