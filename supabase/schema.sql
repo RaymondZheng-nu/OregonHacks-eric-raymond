@@ -88,6 +88,24 @@ returns void as $$
   where id = spot_id;
 $$ language sql;
 
+-- Added so /pending has a way to say a submission looks fake/junk, not just
+-- confirm. Every spot's own flag report count, surfaced in the crowd verdict
+-- blurb (src/lib/spot-verdict.ts) on verified spots too.
+alter table spots add column if not exists flag_count integer not null default 0;
+
+-- Mirrors confirm_spot: a threshold-based anon vote, no auth required. Only
+-- auto-transitions status when the spot is still pending — a verified spot
+-- accumulates flag_count for display (see spot-verdict.ts) but is never
+-- auto-hidden by it, since anon flags on an already-live spot are a
+-- griefing vector with no auth to stop them.
+create or replace function flag_spot(spot_id uuid, threshold integer default 2)
+returns void as $$
+  update spots
+  set flag_count = flag_count + 1,
+      status = case when status = 'pending' and flag_count + 1 >= threshold then 'rejected' else status end
+  where id = spot_id;
+$$ language sql;
+
 -- Speeds up the viewport bounding-box filter (status + lat/lng range) used by
 -- both the map's in-bounds query and the ingestion scripts' proximity dedup
 -- check. Without this, those queries fall back to a full scan of every

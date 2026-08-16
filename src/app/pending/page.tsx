@@ -5,7 +5,7 @@ import { getPendingSpots } from "@/lib/supabase/queries.server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ConfirmSpotButton } from "@/components/confirm-spot-button";
+import { ReviewSpotActions } from "@/components/review-spot-actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CATEGORY_META } from "@/lib/categories";
 
@@ -62,7 +62,7 @@ export default async function PendingPage() {
                   {CATEGORY_META[spot.category].label}
                 </Badge>
               </div>
-              <ConfirmSpotButton spotId={spot.id} />
+              <ReviewSpotActions spotId={spot.id} />
             </CardHeader>
             <CardContent className="space-y-2">
               {spot.photo_url && (
@@ -80,7 +80,8 @@ export default async function PendingPage() {
                 <p className="text-sm">{spot.description}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                {spot.confirm_count}/2 confirmations · {spot.lat.toFixed(4)},{" "}
+                {spot.confirm_count}/2 confirmations · {spot.flag_count} flag
+                {spot.flag_count === 1 ? "" : "s"} · {spot.lat.toFixed(4)},{" "}
                 {spot.lng.toFixed(4)}
               </p>
             </CardContent>

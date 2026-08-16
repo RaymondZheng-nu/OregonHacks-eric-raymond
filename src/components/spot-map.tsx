@@ -2,12 +2,24 @@
 
 import "leaflet/dist/leaflet.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 import type { Spot, SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
 import type { BoundingBox } from "@/lib/geo";
-import { getVerifiedSpotsInBounds, getSpotDensity } from "@/lib/supabase/queries.client";
+import {
+  getVerifiedSpotsInBounds,
+  getSpotDensity,
+} from "@/lib/supabase/queries.client";
+import { getSpotVerdict } from "@/lib/spot-verdict";
+import { cn } from "@/lib/utils";
 
 const NYC_CENTER: [number, number] = [40.7484, -73.9857];
 const DEFAULT_ZOOM = 11;
@@ -47,7 +59,11 @@ function boundsFromLeaflet(bounds: L.LatLngBounds): BoundingBox {
 // a ref so the moveend/zoomend handlers object passed to useMapEvents keeps a
 // stable identity across renders — otherwise react-leaflet tears down and
 // re-adds the native Leaflet listeners on every re-render of this component.
-function ViewportWatcher({ onChange }: { onChange: (viewport: Viewport) => void }) {
+function ViewportWatcher({
+  onChange,
+}: {
+  onChange: (viewport: Viewport) => void;
+}) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onChangeRef = useRef(onChange);
   useEffect(() => {
@@ -57,7 +73,10 @@ function ViewportWatcher({ onChange }: { onChange: (viewport: Viewport) => void 
   const scheduleReport = useCallback((map: L.Map) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      onChangeRef.current({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
+      onChangeRef.current({
+        bounds: boundsFromLeaflet(map.getBounds()),
+        zoom: map.getZoom(),
+      });
     }, MOVE_DEBOUNCE_MS);
   }, []);
 
@@ -67,13 +86,16 @@ function ViewportWatcher({ onChange }: { onChange: (viewport: Viewport) => void 
       zoomend: () => scheduleReport(map),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `map` below is assigned after this memo runs but closed over by reference; both fire only on real Leaflet events, well after `map` is set.
-    [scheduleReport]
+    [scheduleReport],
   );
 
   const map = useMapEvents(handlers);
 
   useEffect(() => {
-    onChangeRef.current({ bounds: boundsFromLeaflet(map.getBounds()), zoom: map.getZoom() });
+    onChangeRef.current({
+      bounds: boundsFromLeaflet(map.getBounds()),
+      zoom: map.getZoom(),
+    });
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
@@ -125,7 +147,11 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
 
   useEffect(() => {
     if (!pluginReady) return;
-    const layer = L.heatLayer(points, { radius: 22, blur: 28, maxZoom: HEATMAP_ZOOM_THRESHOLD });
+    const layer = L.heatLayer(points, {
+      radius: 22,
+      blur: 28,
+      maxZoom: HEATMAP_ZOOM_THRESHOLD,
+    });
     layer.addTo(map);
     return () => {
       map.removeLayer(layer);
@@ -174,7 +200,7 @@ export function SpotMap({
 
   const categoryList = useMemo(
     () => Array.from(categories).sort(),
-    [categories]
+    [categories],
   );
 
   const handleViewportChange = useCallback((next: Viewport) => {
@@ -182,7 +208,9 @@ export function SpotMap({
   }, []);
 
   const mode: MapMode =
-    !viewport || viewport.zoom >= HEATMAP_ZOOM_THRESHOLD ? "markers" : "heatmap";
+    !viewport || viewport.zoom >= HEATMAP_ZOOM_THRESHOLD
+      ? "markers"
+      : "heatmap";
 
   // No categories selected means "show nothing" — derived directly at render
   // time rather than via setState in the effect below, so there's no need to
@@ -194,7 +222,8 @@ export function SpotMap({
   // exists in the currently-rendered set — the results list only passes the
   // spot's own coordinates, not a guarantee it's already in `spots`.
   useEffect(() => {
-    if (!focusSpotId || hasOpenedFocusPopupRef.current || noCategoriesSelected) return;
+    if (!focusSpotId || hasOpenedFocusPopupRef.current || noCategoriesSelected)
+      return;
     const marker = markerRefs.current.get(focusSpotId);
     if (marker) {
       marker.openPopup();
@@ -245,7 +274,9 @@ export function SpotMap({
     getSpotDensity(viewport.bounds)
       .then((buckets) => {
         if (cancelled) return;
-        const points = buckets.map((b) => [b.lat, b.lng, b.count] as L.HeatLatLngTuple);
+        const points = buckets.map(
+          (b) => [b.lat, b.lng, b.count] as L.HeatLatLngTuple,
+        );
         setDensityPoints(points);
         const total = buckets.reduce((sum, b) => sum + b.count, 0);
         onViewChange?.({ count: total, mode: "heatmap" });
@@ -273,49 +304,64 @@ export function SpotMap({
       />
       <ViewportWatcher onChange={handleViewportChange} />
       {mode === "markers" ? (
-        visibleSpots.map((spot) => (
-          <Marker
-            key={spot.id}
-            position={[spot.lat, spot.lng]}
-            icon={markerIcon(CATEGORY_META[spot.category].color)}
-            ref={(instance) => {
-              if (instance) markerRefs.current.set(spot.id, instance);
-              else markerRefs.current.delete(spot.id);
-            }}
-          >
-            <Popup>
-              <div className="w-52 space-y-1.5">
-                {spot.photo_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={spot.photo_url}
-                    alt={spot.name}
-                    className="h-24 w-full rounded object-cover"
-                  />
-                )}
-                <p className="font-semibold leading-tight">{spot.name}</p>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{CATEGORY_META[spot.category].label}</span>
-                  <span>·</span>
-                  <span>
-                    {spot.source === "official" ? "Open data" : "Community spot"}
-                  </span>
+        visibleSpots.map((spot) => {
+          const verdict = getSpotVerdict(spot);
+          return (
+            <Marker
+              key={spot.id}
+              position={[spot.lat, spot.lng]}
+              icon={markerIcon(CATEGORY_META[spot.category].color)}
+              ref={(instance) => {
+                if (instance) markerRefs.current.set(spot.id, instance);
+                else markerRefs.current.delete(spot.id);
+              }}
+            >
+              <Popup>
+                <div className="w-52 space-y-1.5">
+                  {spot.photo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={spot.photo_url}
+                      alt={spot.name}
+                      className="h-24 w-full rounded object-cover"
+                    />
+                  )}
+                  <p className="font-semibold leading-tight">{spot.name}</p>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{CATEGORY_META[spot.category].label}</span>
+                    <span>·</span>
+                    <span>
+                      {spot.source === "official"
+                        ? "Open data"
+                        : "Community spot"}
+                    </span>
+                  </div>
+                  {spot.description && (
+                    <p className="text-xs">{spot.description}</p>
+                  )}
+                  <p
+                    className={cn(
+                      "text-xs",
+                      verdict.tone === "caution"
+                        ? "text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {verdict.label}
+                  </p>
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-xs font-medium text-primary underline underline-offset-2"
+                  >
+                    Get directions
+                  </a>
                 </div>
-                {spot.description && (
-                  <p className="text-xs">{spot.description}</p>
-                )}
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block text-xs font-medium text-primary underline underline-offset-2"
-                >
-                  Get directions
-                </a>
-              </div>
-            </Popup>
-          </Marker>
-        ))
+              </Popup>
+            </Marker>
+          );
+        })
       ) : (
         <HeatmapLayer points={densityPoints} />
       )}

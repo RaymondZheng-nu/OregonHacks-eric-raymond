@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   insertSpot,
   confirmSpotRpc,
+  flagSpotRpc,
   fetchVerifiedSpotsInBounds,
   fetchSpotDensity,
   type SubmitSpotInput,
@@ -16,7 +17,7 @@ export async function submitSpot(input: SubmitSpotInput) {
 // For the map to refetch on pan/zoom without a full page round-trip.
 export async function getVerifiedSpotsInBounds(
   bounds: BoundingBox,
-  options?: SpotsInBoundsOptions
+  options?: SpotsInBoundsOptions,
 ) {
   return fetchVerifiedSpotsInBounds(createClient(), bounds, options);
 }
@@ -27,4 +28,8 @@ export async function getSpotDensity(bounds: BoundingBox, gridSize?: number) {
 
 export async function confirmSpot(spotId: string) {
   return confirmSpotRpc(createClient(), spotId);
+}
+
+export async function flagSpot(spotId: string) {
+  return flagSpotRpc(createClient(), spotId);
 }

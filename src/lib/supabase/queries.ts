@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Spot, SpotCategory } from "@/lib/types";
-import { boundingBox, haversineDistanceMeters, type BoundingBox } from "@/lib/geo";
+import {
+  boundingBox,
+  haversineDistanceMeters,
+  type BoundingBox,
+} from "@/lib/geo";
 
 // Reads soft-fail to empty defaults (matches the `data ?? []` pattern the call
 // sites used before this module existed) so a page never crashes on a blip.
@@ -23,7 +27,7 @@ export type SubmitSpotInput = {
 const FETCH_PAGE_SIZE = 1000;
 
 export async function fetchVerifiedSpots(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
 ): Promise<Spot[]> {
   const allSpots: Spot[] = [];
   let from = 0;
@@ -52,7 +56,7 @@ export async function fetchVerifiedSpots(
 // the returned window entirely once total verified spots exceeds 1000.
 export async function fetchFeaturedSpots(
   supabase: SupabaseClient,
-  limit: number
+  limit: number,
 ): Promise<Spot[]> {
   const { data } = await supabase
     .from("spots")
@@ -67,7 +71,7 @@ export async function fetchFeaturedSpots(
 }
 
 export async function fetchPendingSpots(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
 ): Promise<Spot[]> {
   const allSpots: Spot[] = [];
   let from = 0;
@@ -112,9 +116,14 @@ const DEFAULT_BOUNDS_LIMIT = 1000;
 export async function fetchVerifiedSpotsInBounds(
   supabase: SupabaseClient,
   bounds: BoundingBox,
-  options: SpotsInBoundsOptions = {}
+  options: SpotsInBoundsOptions = {},
 ): Promise<Spot[]> {
-  const { limit = DEFAULT_BOUNDS_LIMIT, categories, activity, picnic } = options;
+  const {
+    limit = DEFAULT_BOUNDS_LIMIT,
+    categories,
+    activity,
+    picnic,
+  } = options;
 
   // `categories: undefined` means "no filter"; `categories: []` means "filter
   // to nothing" and must return zero rows, not silently fall back to
@@ -166,7 +175,7 @@ const DEFAULT_DENSITY_GRID_SIZE = 0.05;
 export async function fetchSpotDensity(
   supabase: SupabaseClient,
   bounds: BoundingBox,
-  gridSize: number = DEFAULT_DENSITY_GRID_SIZE
+  gridSize: number = DEFAULT_DENSITY_GRID_SIZE,
 ): Promise<DensityBucket[]> {
   const { data, error } = await supabase.rpc("spot_density_grid", {
     min_lat: bounds.minLat,
@@ -181,7 +190,7 @@ export async function fetchSpotDensity(
 }
 
 export async function fetchPendingCount(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
 ): Promise<number> {
   const { count } = await supabase
     .from("spots")
@@ -193,7 +202,7 @@ export async function fetchPendingCount(
 
 export async function insertSpot(
   supabase: SupabaseClient,
-  input: SubmitSpotInput
+  input: SubmitSpotInput,
 ): Promise<Spot> {
   const { data, error } = await supabase
     .from("spots")
@@ -207,9 +216,17 @@ export async function insertSpot(
 
 export async function confirmSpotRpc(
   supabase: SupabaseClient,
-  spotId: string
+  spotId: string,
 ): Promise<void> {
   const { error } = await supabase.rpc("confirm_spot", { spot_id: spotId });
+  if (error) throw new Error(error.message);
+}
+
+export async function flagSpotRpc(
+  supabase: SupabaseClient,
+  spotId: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("flag_spot", { spot_id: spotId });
   if (error) throw new Error(error.message);
 }
 
@@ -223,7 +240,7 @@ export async function findNearbySpot(
   supabase: SupabaseClient,
   lat: number,
   lng: number,
-  radiusMeters = 30
+  radiusMeters = 30,
 ): Promise<Spot | null> {
   const box = boundingBox(lat, lng, radiusMeters);
   const { data } = await supabase
@@ -240,7 +257,12 @@ export async function findNearbySpot(
   let closestDistance = Infinity;
 
   for (const candidate of candidates) {
-    const distance = haversineDistanceMeters(lat, lng, candidate.lat, candidate.lng);
+    const distance = haversineDistanceMeters(
+      lat,
+      lng,
+      candidate.lat,
+      candidate.lng,
+    );
     if (distance <= radiusMeters && distance < closestDistance) {
       closest = candidate;
       closestDistance = distance;

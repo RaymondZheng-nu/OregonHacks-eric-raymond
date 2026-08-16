@@ -18,6 +18,7 @@ export type Spot = {
   source: SpotSource;
   status: "pending" | "verified" | "rejected" | "merged";
   confirm_count: number;
+  flag_count: number;
   lat: number;
   lng: number;
   photo_url: string | null;
