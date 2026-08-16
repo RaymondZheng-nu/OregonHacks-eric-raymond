@@ -14,9 +14,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// A wider pool than any single map viewport needs, specifically so
-// "Refresh" on the results list has genuinely different spots to cycle
-// through instead of reshuffling the same handful every time.
+// A wider pool than any single map viewport needs, so paging through the
+// results popup has real variety instead of looping through a handful.
 const POOL_LIMIT = 40;
 
 export default async function ResultsPage({
@@ -74,11 +73,6 @@ export default async function ResultsPage({
         </div>
       </header>
       <main className="mx-auto max-w-[1400px] px-4 py-8">
-        <h1 className="font-heading text-2xl font-semibold">Your matches</h1>
-        <p className="mb-6 text-sm text-muted-foreground">
-          {spotsWithDistance.length} real spot{spotsWithDistance.length === 1 ? "" : "s"} found
-          {hasOrigin ? " near you" : " across the country"}.
-        </p>
         <ResultsList spots={spotsWithDistance} exploreParams={exploreParams.toString()} />
       </main>
     </div>
