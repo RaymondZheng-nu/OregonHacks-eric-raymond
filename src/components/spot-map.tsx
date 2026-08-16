@@ -138,11 +138,13 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
 export function SpotMap({
   initialSpots,
   categories,
+  activity,
   initialCenter,
   onViewChange,
 }: {
   initialSpots: Spot[];
   categories: Set<SpotCategory>;
+  activity?: string;
   initialCenter?: [number, number];
   onViewChange?: (info: { count: number; mode: MapMode }) => void;
 }) {
@@ -192,6 +194,7 @@ export function SpotMap({
     getVerifiedSpotsInBounds(viewport.bounds, {
       limit: VIEWPORT_FETCH_LIMIT,
       categories: categoryList,
+      activity,
     })
       .then((result) => {
         if (cancelled) return;
@@ -207,7 +210,7 @@ export function SpotMap({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded: it's a per-render prop from the parent, not something a refetch should be keyed on.
-  }, [viewport, mode, categoryList]);
+  }, [viewport, mode, categoryList, activity]);
 
   // Heatmap mode: the density RPC has no category param (deliberately — see
   // schema.sql), so this only depends on viewport, not categoryList. Toggling

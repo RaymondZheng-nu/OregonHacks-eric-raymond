@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ChevronDownIcon, ClipboardListIcon } from "lucide-react";
+import { ChevronDownIcon, ClipboardListIcon, XIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -13,6 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ACTIVITY_LABELS } from "@/lib/activities";
 import { CATEGORY_META } from "@/lib/categories";
 import type { Spot, SpotCategory } from "@/lib/types";
 import type { MapMode } from "@/components/spot-map";
@@ -28,11 +29,13 @@ export function ExploreView({
   initialSpots,
   pendingCount,
   initialActiveCategories,
+  initialActivity,
   initialCenter,
 }: {
   initialSpots: Spot[];
   pendingCount: number;
   initialActiveCategories?: SpotCategory[];
+  initialActivity?: string;
   initialCenter?: [number, number];
 }) {
   // Falls back to every category when the questionnaire didn't specify any
@@ -41,6 +44,7 @@ export function ExploreView({
   const [activeCategories, setActiveCategories] = useState<Set<SpotCategory>>(
     new Set(initialActiveCategories?.length ? initialActiveCategories : ALL_CATEGORIES)
   );
+  const [activeActivity, setActiveActivity] = useState<string | undefined>(initialActivity);
   const [visibleCount, setVisibleCount] = useState(initialSpots.length);
   const [mapMode, setMapMode] = useState<MapMode>("markers");
   const isHeatmapMode = mapMode === "heatmap";
@@ -72,6 +76,17 @@ export function ExploreView({
           <p className="text-sm text-muted-foreground">
             {visibleCount} green spaces & nature spots in this view
           </p>
+          {activeActivity && (
+            <button
+              type="button"
+              onClick={() => setActiveActivity(undefined)}
+              className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
+            >
+              Good for: {ACTIVITY_LABELS[activeActivity] ?? activeActivity}
+              <XIcon aria-hidden="true" className="size-3" />
+              <span className="sr-only">Clear activity filter</span>
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-col gap-1">
@@ -131,6 +146,7 @@ export function ExploreView({
         <SpotMap
           initialSpots={initialSpots}
           categories={activeCategories}
+          activity={activeActivity}
           initialCenter={initialCenter}
           onViewChange={({ count, mode }) => {
             setVisibleCount(count);
@@ -151,7 +167,9 @@ export function ExploreView({
                 <>
                   <p className="text-sm font-medium">No spots match these filters</p>
                   <p className="text-xs text-muted-foreground">
-                    Turn a category back on above to see it on the map.
+                    {activeActivity
+                      ? "Try clearing the activity filter above, or turn a category back on."
+                      : "Turn a category back on above to see it on the map."}
                   </p>
                 </>
               )}

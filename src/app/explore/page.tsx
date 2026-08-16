@@ -41,6 +41,7 @@ export default async function ExplorePage({
   const lat = parseNumber(params.lat);
   const lng = parseNumber(params.lng);
   const radiusMeters = parseNumber(params.radius);
+  const activity = params.activity || undefined;
 
   // A questionnaire-derived location narrows the initial SSR fetch to that
   // area (same bounded-fetch pattern as the plain default) — the map still
@@ -53,6 +54,7 @@ export default async function ExplorePage({
   const [spots, pendingCount] = await Promise.all([
     getVerifiedSpotsInBounds(initialBounds, {
       categories: categories ?? undefined,
+      activity,
     }),
     getPendingCount(),
   ]);
@@ -62,6 +64,7 @@ export default async function ExplorePage({
       initialSpots={spots}
       pendingCount={pendingCount}
       initialActiveCategories={categories ?? undefined}
+      initialActivity={activity}
       initialCenter={lat !== null && lng !== null ? [lat, lng] : undefined}
     />
   );

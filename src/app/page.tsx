@@ -72,6 +72,9 @@ export default async function LandingPage() {
             people who actually left the house to find them.
           </p>
           <div id="hero-cta" className="mt-6 flex flex-col items-start gap-2">
+            <p className="text-sm font-medium text-muted-foreground">
+              Feeling adventurous?
+            </p>
             <StartSessionDialog />
             <Link
               href="/explore"

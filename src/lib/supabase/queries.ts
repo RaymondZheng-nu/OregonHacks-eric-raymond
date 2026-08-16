@@ -92,6 +92,10 @@ export async function fetchPendingSpots(
 export type SpotsInBoundsOptions = {
   limit?: number;
   categories?: SpotCategory[];
+  // Set only when the "what do you want to do" quiz question was answered —
+  // filters against the `activity_fit` array column (see dedup-cleanup.mjs)
+  // rather than being a hard requirement for plain map browsing.
+  activity?: string;
 };
 
 const DEFAULT_BOUNDS_LIMIT = 1000;
@@ -105,7 +109,7 @@ export async function fetchVerifiedSpotsInBounds(
   bounds: BoundingBox,
   options: SpotsInBoundsOptions = {}
 ): Promise<Spot[]> {
-  const { limit = DEFAULT_BOUNDS_LIMIT, categories } = options;
+  const { limit = DEFAULT_BOUNDS_LIMIT, categories, activity } = options;
 
   // `categories: undefined` means "no filter"; `categories: []` means "filter
   // to nothing" and must return zero rows, not silently fall back to
@@ -128,6 +132,10 @@ export async function fetchVerifiedSpotsInBounds(
 
   if (categories) {
     query = query.in("category", categories);
+  }
+
+  if (activity) {
+    query = query.overlaps("activity_fit", [activity]);
   }
 
   const { data, error } = await query;

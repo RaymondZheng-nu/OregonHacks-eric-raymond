@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ACTIVITY_OPTIONS } from "@/lib/activities";
 import { CATEGORY_META } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
@@ -44,6 +46,7 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
+  const [activity, setActivity] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [address, setAddress] = useState("");
@@ -62,6 +65,16 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
       return next;
     });
     setErrors((prev) => ({ ...prev, categories: undefined }));
+  }
+
+  function selectActivity(option: (typeof ACTIVITY_OPTIONS)[number]) {
+    const nextActivity = activity === option.value ? null : option.value;
+    setActivity(nextActivity);
+
+    if (nextActivity && option.impliesCategory) {
+      setCategories((prev) => new Set(prev).add(option.impliesCategory as SpotCategory));
+      setErrors((prev) => ({ ...prev, categories: undefined }));
+    }
   }
 
   function useMyLocation() {
@@ -92,6 +105,7 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
 
     const params = new URLSearchParams();
     params.set("cats", Array.from(categories).join(","));
+    if (activity) params.set("activity", activity);
 
     if (address.trim()) {
       setSubmitting(true);
@@ -126,13 +140,16 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
       <DialogTrigger
         render={
           <Button size="lg" className={fullWidth ? "w-full" : undefined}>
-            Start session
+            Take a quiz
           </Button>
         }
       />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Find spots near you</DialogTitle>
+          <DialogTitle>Find your spot</DialogTitle>
+          <DialogDescription>
+            A couple quick questions and we&apos;ll point you to real spots nearby.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -170,6 +187,36 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
             {errors.categories && (
               <p className="text-xs text-destructive">{errors.categories}</p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>What do you want to do there? (optional)</Label>
+            <div className="flex flex-wrap gap-2">
+              {ACTIVITY_OPTIONS.map((option) => {
+                const active = activity === option.value;
+                return (
+                  <Badge
+                    key={option.value}
+                    variant="outline"
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => selectActivity(option)}
+                      />
+                    }
+                    className={cn(
+                      "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "opacity-40"
+                    )}
+                  >
+                    {option.label}
+                  </Badge>
+                );
+              })}
+            </div>
           </div>
 
           <div className="space-y-2">
