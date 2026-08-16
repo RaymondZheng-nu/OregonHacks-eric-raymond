@@ -1,6 +1,25 @@
 const EARTH_RADIUS_METERS = 6_371_000;
 const METERS_PER_DEGREE_LAT = 111_320;
 
+// Shared cap for any user- or URL-supplied query radius (questionnaire travel
+// time, /swipe and /explore's ?radius= param). Without this, an arbitrarily
+// large value produces a near-global bounding box and an unbounded spot
+// query; a negative value produces an inverted box and an incorrectly empty
+// one. ~185mi (300km) comfortably covers "a long drive," not "the whole
+// country."
+export const MAX_QUERY_RADIUS_METERS = 300_000;
+
+export function clampRadiusMeters(radiusMeters: number): number {
+  if (!Number.isFinite(radiusMeters)) return MAX_QUERY_RADIUS_METERS;
+  return Math.min(Math.max(radiusMeters, 1), MAX_QUERY_RADIUS_METERS);
+}
+
+export function isValidLatLng(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+  );
+}
+
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
@@ -29,7 +48,13 @@ export type BoundingBox = {
 
 export function boundingBox(lat: number, lng: number, radiusMeters: number): BoundingBox {
   const latDelta = radiusMeters / METERS_PER_DEGREE_LAT;
-  const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(toRadians(lat));
+  // Clamped away from exactly ±90: cos(lat) approaches 0 at the poles, so
+  // metersPerDegreeLng approaches 0 and lngDelta blows up toward a
+  // near-global box. No real query origin is ever actually at the pole
+  // (isValidLatLng's range is a sanity check, not a guarantee of realistic
+  // input), so this only guards the division, not correctness at normal
+  // latitudes.
+  const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(toRadians(Math.min(Math.abs(lat), 89.9)));
   const lngDelta = radiusMeters / metersPerDegreeLng;
 
   return {

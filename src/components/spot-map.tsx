@@ -1,13 +1,22 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import type { Spot, SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
 import type { BoundingBox } from "@/lib/geo";
 import { getVerifiedSpotsInBounds, getSpotDensity } from "@/lib/supabase/queries.client";
+import type { SpotsInBoundsOptions } from "@/lib/supabase/queries";
+
+export type AdvancedFilters = Pick<
+  SpotsInBoundsOptions,
+  "sizeClasses" | "amenities" | "wheelchairAccessibleOnly" | "climbingGrades"
+>;
 
 const NYC_CENTER: [number, number] = [40.7484, -73.9857];
 const DEFAULT_ZOOM = 11;
@@ -143,6 +152,8 @@ export function SpotMap({
   initialCenter,
   focusSpotId,
   onViewChange,
+  minParkAreaM2,
+  advancedFilters,
 }: {
   initialSpots: Spot[];
   categories: Set<SpotCategory>;
@@ -151,6 +162,8 @@ export function SpotMap({
   initialCenter?: [number, number];
   focusSpotId?: string;
   onViewChange?: (info: { count: number; mode: MapMode }) => void;
+  minParkAreaM2?: number;
+  advancedFilters?: AdvancedFilters;
 }) {
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [spots, setSpots] = useState<Spot[]>(initialSpots);
@@ -216,6 +229,8 @@ export function SpotMap({
     getVerifiedSpotsInBounds(viewport.bounds, {
       limit: VIEWPORT_FETCH_LIMIT,
       categories: categoryList,
+      minParkAreaM2,
+      ...advancedFilters,
       activity,
       picnic,
     })
@@ -233,7 +248,7 @@ export function SpotMap({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded: it's a per-render prop from the parent, not something a refetch should be keyed on.
-  }, [viewport, mode, categoryList, activity, picnic]);
+  }, [viewport, mode, categoryList, minParkAreaM2, advancedFilters, activity, picnic]);
 
   // Heatmap mode: the density RPC has no category param (deliberately — see
   // schema.sql), so this only depends on viewport, not categoryList. Toggling
@@ -267,55 +282,70 @@ export function SpotMap({
       scrollWheelZoom
       className="h-full w-full"
     >
+      {/* CARTO Positron: no API key required, minimal light basemap — the
+          standard OSM raster tiles above render every road/label/POI, which
+          reads as noisy at the zoom levels this app is used at. */}
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        subdomains="abcd"
       />
       <ViewportWatcher onChange={handleViewportChange} />
       {mode === "markers" ? (
-        visibleSpots.map((spot) => (
-          <Marker
-            key={spot.id}
-            position={[spot.lat, spot.lng]}
-            icon={markerIcon(CATEGORY_META[spot.category].color)}
-            ref={(instance) => {
-              if (instance) markerRefs.current.set(spot.id, instance);
-              else markerRefs.current.delete(spot.id);
-            }}
-          >
-            <Popup>
-              <div className="w-52 space-y-1.5">
-                {spot.photo_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={spot.photo_url}
-                    alt={spot.name}
-                    className="h-24 w-full rounded object-cover"
-                  />
-                )}
-                <p className="font-semibold leading-tight">{spot.name}</p>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{CATEGORY_META[spot.category].label}</span>
-                  <span>·</span>
-                  <span>
-                    {spot.source === "official" ? "Open data" : "Community spot"}
-                  </span>
+        // Clustered instead of one Marker+Popup DOM node per spot: at up to
+        // 1000 spots in view (VIEWPORT_FETCH_LIMIT), unclustered rendering
+        // was the main cause of map lag. Clustering collapses nearby pins
+        // into a single count bubble until the user zooms in enough to
+        // separate them, so the DOM node count stays bounded regardless of
+        // how dense a viewport gets. The ref callback still registers each
+        // Marker instance for the focusSpotId popup-opening effect above —
+        // at focusSpotId's forced zoom (16), the pin it targets has already
+        // separated out of any cluster.
+        <MarkerClusterGroup chunkedLoading>
+          {visibleSpots.map((spot) => (
+            <Marker
+              key={spot.id}
+              position={[spot.lat, spot.lng]}
+              icon={markerIcon(CATEGORY_META[spot.category].color)}
+              ref={(instance) => {
+                if (instance) markerRefs.current.set(spot.id, instance);
+                else markerRefs.current.delete(spot.id);
+              }}
+            >
+              <Popup>
+                <div className="w-52 space-y-1.5">
+                  {spot.photo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={spot.photo_url}
+                      alt={spot.name}
+                      className="h-24 w-full rounded object-cover"
+                    />
+                  )}
+                  <p className="font-semibold leading-tight">{spot.name}</p>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{CATEGORY_META[spot.category].label}</span>
+                    <span>·</span>
+                    <span>
+                      {spot.source === "official" ? "Open data" : "Community spot"}
+                    </span>
+                  </div>
+                  {spot.description && (
+                    <p className="text-xs">{spot.description}</p>
+                  )}
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-xs font-medium text-primary underline underline-offset-2"
+                  >
+                    Get directions
+                  </a>
                 </div>
-                {spot.description && (
-                  <p className="text-xs">{spot.description}</p>
-                )}
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block text-xs font-medium text-primary underline underline-offset-2"
-                >
-                  Get directions
-                </a>
-              </div>
-            </Popup>
-          </Marker>
-        ))
+              </Popup>
+            </Marker>
+          ))}
+        </MarkerClusterGroup>
       ) : (
         <HeatmapLayer points={densityPoints} />
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { StartSessionDialog } from "@/components/start-session-dialog";
+import { SessionQuestionnaire } from "@/components/session-questionnaire";
 
 // Shows once the hero's own Start Session button scrolls out of view, so
 // mobile users browsing further down don't have to scroll back up. Hidden
@@ -27,7 +27,7 @@ export function StickyMobileCta({ heroCtaId }: { heroCtaId: string }) {
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-[1150] border-t bg-background/95 p-3 shadow-md backdrop-blur-xs sm:hidden">
-      <StartSessionDialog fullWidth />
+      <SessionQuestionnaire fullWidth />
     </div>
   );
 }

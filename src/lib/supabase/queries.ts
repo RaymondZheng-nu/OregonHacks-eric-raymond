@@ -92,6 +92,23 @@ export async function fetchPendingSpots(
 export type SpotsInBoundsOptions = {
   limit?: number;
   categories?: SpotCategory[];
+  // Overrides JUNK_AREA_FLOOR_M2 below — exposed so the map's advanced
+  // settings can raise the bar above the default junk floor (e.g. "only
+  // parks over 2000 m²"). Never goes below the default: this is a stricter
+  // override, not a way to re-admit sub-floor junk that query-time filtering
+  // already excludes.
+  minParkAreaM2?: number;
+  // Below: all optional, all no-ops unless the row actually has the data —
+  // size_class/amenities/accessibility are populated by the dedup-cleanup
+  // pipeline's tagging pass (see schema.sql), so rows this hasn't reached
+  // yet just won't match a non-empty filter, same as a genuinely-unset value.
+  sizeClasses?: string[];
+  amenities?: string[];
+  wheelchairAccessibleOnly?: boolean;
+  // Applied only when relevant (category = 'climbing'); grade strings aren't
+  // a single orderable scale (French vs YDS), so this is an exact-match set,
+  // not a numeric range.
+  climbingGrades?: string[];
   // Set only when the "what do you want to do" quiz question was answered —
   // filters against the `activity_fit` array column (see dedup-cleanup.mjs)
   // rather than being a hard requirement for plain map browsing.
@@ -105,6 +122,17 @@ export type SpotsInBoundsOptions = {
 
 const DEFAULT_BOUNDS_LIMIT = 1000;
 
+// Same floor as scripts/dedup-cleanup.mjs's HARD_REJECT_FLOOR_M2, kept in
+// sync deliberately: that offline script only fixes up spots it's manually
+// run against, so a junk-sized traffic median or street planter that's
+// already `verified` (or added after the last cleanup pass) would otherwise
+// still render. This applies the same threshold live, at read time, so the
+// map never shows what the batch cleanup would also reject. `area_m2 is
+// null` stays exempt — most non-OSM-way spots (user submissions, OSM nodes)
+// never have an area at all, and null means "unknown," not "tiny."
+const JUNK_FILTERED_CATEGORIES: SpotCategory[] = ["park", "other"];
+const JUNK_AREA_FLOOR_M2 = 150;
+
 // Viewport-scoped read for the map: only spots inside the given bounds, so
 // payload size tracks what's on screen instead of the whole table. `limit`
 // is a defensive ceiling (dense downtown viewports), not expected to bind
@@ -114,7 +142,18 @@ export async function fetchVerifiedSpotsInBounds(
   bounds: BoundingBox,
   options: SpotsInBoundsOptions = {}
 ): Promise<Spot[]> {
-  const { limit = DEFAULT_BOUNDS_LIMIT, categories, activity, picnic } = options;
+  const {
+    limit = DEFAULT_BOUNDS_LIMIT,
+    categories,
+    minParkAreaM2,
+    sizeClasses,
+    amenities,
+    wheelchairAccessibleOnly,
+    climbingGrades,
+    activity,
+    picnic,
+  } = options;
+  const areaFloor = Math.max(minParkAreaM2 ?? JUNK_AREA_FLOOR_M2, JUNK_AREA_FLOOR_M2);
 
   // `categories: undefined` means "no filter"; `categories: []` means "filter
   // to nothing" and must return zero rows, not silently fall back to
@@ -133,10 +172,118 @@ export async function fetchVerifiedSpotsInBounds(
     .gte("lng", bounds.minLng)
     .lte("lng", bounds.maxLng)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(limit)
+    .or(
+      `category.not.in.(${JUNK_FILTERED_CATEGORIES.join(",")}),area_m2.gte.${areaFloor},area_m2.is.null`
+    );
 
   if (categories) {
     query = query.in("category", categories);
+  }
+
+  if (sizeClasses && sizeClasses.length > 0) {
+    query = query.in("size_class", sizeClasses);
+  }
+
+  // Overlap, not containment: "has at least one of the selected amenities,"
+  // not "has all of them" — the intuitive read for a checkbox filter.
+  if (amenities && amenities.length > 0) {
+    query = query.overlaps("amenities", amenities);
+  }
+
+  if (wheelchairAccessibleOnly) {
+    query = query.eq("accessibility", "yes");
+  }
+
+  if (climbingGrades && climbingGrades.length > 0) {
+    query = query.in("climbing_grade", climbingGrades);
+  }
+
+  if (activity) {
+    query = query.overlaps("activity_fit", [activity]);
+  }
+
+  // picnic and an explicit sizeClasses filter both constrain size_class —
+  // intersect them (.in twice) rather than letting the second call silently
+  // clobber the first, so "medium/large" from picnic still narrows further
+  // if the user also picked a specific size in Advanced settings.
+  if (picnic) {
+    query = query.in("size_class", ["medium", "large"]);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Spot[];
+}
+
+const DEFAULT_NATIONWIDE_SAMPLE_SIZE = 150;
+
+// Raw pool pulled before shuffling. This has to comfortably exceed the
+// table's total matching-row count, not just be "large": without an
+// ORDER BY, `.limit()` doesn't take a random sample of all matching rows —
+// Postgres returns whatever subset it scans first (in practice, close to
+// insertion order, i.e. city-clustered from the 30-city ingestion batches in
+// scripts/ingest-osm-cities.mjs), and every row outside that subset is
+// permanently excluded from ever being sampled, no matter how the shuffle
+// below reorders what did come back. At ~21k total spots today, 25k covers
+// the whole table; if ingestion grows well past that, this needs to become a
+// real database-side random sample (e.g. an `ORDER BY random() LIMIT n` RPC)
+// instead of a bigger constant.
+const NATIONWIDE_RAW_POOL_SIZE = 25_000;
+
+// No-bounds counterpart to fetchVerifiedSpotsInBounds, for when there's no
+// location context to scope a viewport to (e.g. the questionnaire's address
+// field was skipped — see session-questionnaire.tsx's "browse spots across
+// the whole country" copy, which this makes literally true instead of
+// silently falling back to a single city's radius).
+export async function fetchVerifiedSpotsNationwide(
+  supabase: SupabaseClient,
+  options: SpotsInBoundsOptions = {}
+): Promise<Spot[]> {
+  const {
+    limit = DEFAULT_NATIONWIDE_SAMPLE_SIZE,
+    categories,
+    minParkAreaM2,
+    sizeClasses,
+    amenities,
+    wheelchairAccessibleOnly,
+    climbingGrades,
+    activity,
+    picnic,
+  } = options;
+  const areaFloor = Math.max(minParkAreaM2 ?? JUNK_AREA_FLOOR_M2, JUNK_AREA_FLOOR_M2);
+
+  if (categories && categories.length === 0) {
+    return [];
+  }
+
+  let query = supabase
+    .from("spots")
+    .select("*")
+    .eq("status", "verified")
+    .limit(NATIONWIDE_RAW_POOL_SIZE)
+    .or(
+      `category.not.in.(${JUNK_FILTERED_CATEGORIES.join(",")}),area_m2.gte.${areaFloor},area_m2.is.null`
+    );
+
+  if (categories) {
+    query = query.in("category", categories);
+  }
+
+  if (sizeClasses && sizeClasses.length > 0) {
+    query = query.in("size_class", sizeClasses);
+  }
+
+  if (amenities && amenities.length > 0) {
+    query = query.overlaps("amenities", amenities);
+  }
+
+  if (wheelchairAccessibleOnly) {
+    query = query.eq("accessibility", "yes");
+  }
+
+  if (climbingGrades && climbingGrades.length > 0) {
+    query = query.in("climbing_grade", climbingGrades);
   }
 
   if (activity) {
@@ -149,7 +296,16 @@ export async function fetchVerifiedSpotsInBounds(
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as Spot[];
+
+  // Fisher-Yates, not .sort(() => Math.random() - 0.5) — the sort-comparator
+  // trick is a biased shuffle (V8's sort isn't a fair coin flip per pair).
+  const pool = (data ?? []) as Spot[];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  return pool.slice(0, limit);
 }
 
 export type DensityBucket = {
@@ -178,6 +334,53 @@ export async function fetchSpotDensity(
 
   if (error) throw new Error(error.message);
   return (data ?? []) as DensityBucket[];
+}
+
+// Populates the amenities checkbox filter with whatever actually occurs in
+// the data, rather than a hardcoded guess that could drift from real OSM
+// tags. Soft-fails to [] on any error (same convention as this module's
+// other reads) — a page render should never break because the filter
+// options couldn't be computed.
+export async function fetchDistinctAmenities(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("spots")
+    .select("amenities")
+    .eq("status", "verified")
+    .not("amenities", "is", null)
+    .limit(2000);
+
+  if (error) return [];
+
+  const values = new Set<string>();
+  for (const row of data ?? []) {
+    for (const amenity of (row.amenities as string[] | null) ?? []) {
+      values.add(amenity);
+    }
+  }
+  return Array.from(values).sort();
+}
+
+// Same soft-fail convention as fetchDistinctAmenities, but with an extra
+// gap to guard against: climbing_grade is a new column (schema.sql) that
+// may not exist live yet in a given deployment — same DDL-lag situation as
+// area_m2 before it. A missing column reads as "no grades available yet,"
+// not a crash.
+export async function fetchDistinctClimbingGrades(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("spots")
+    .select("climbing_grade")
+    .eq("status", "verified")
+    .eq("category", "climbing")
+    .not("climbing_grade", "is", null)
+    .limit(2000);
+
+  if (error) return [];
+
+  const values = new Set<string>();
+  for (const row of data ?? []) {
+    if (row.climbing_grade) values.add(row.climbing_grade as string);
+  }
+  return Array.from(values).sort();
 }
 
 export async function fetchPendingCount(

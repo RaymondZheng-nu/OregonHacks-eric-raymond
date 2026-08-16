@@ -4,7 +4,7 @@ import { ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { FeaturedSpotlight } from "@/components/featured-spotlight";
 import { SpotlightCarousel } from "@/components/spotlight-carousel";
-import { StartSessionDialog } from "@/components/start-session-dialog";
+import { SessionQuestionnaire } from "@/components/session-questionnaire";
 import { StickyMobileCta } from "@/components/sticky-mobile-cta";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -67,15 +67,10 @@ export default async function LandingPage() {
             TOUCH GRASS
           </h1>
           <p className="mt-4 max-w-md text-lg text-muted-foreground text-pretty">
-            Yeah, you. Close the app, get off the couch, there&apos;s a whole
-            outside out there. Real parks and quiet spots near you, from
-            people who actually left the house to find them.
+            Yeah, you. Stop rotting and [TITLE CARD]
           </p>
           <div id="hero-cta" className="mt-6 flex flex-col items-start gap-2">
-            <p className="text-sm font-medium text-muted-foreground">
-              Feeling adventurous?
-            </p>
-            <StartSessionDialog />
+            <SessionQuestionnaire />
             <Link
               href="/explore"
               className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"

@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { ExploreView } from "@/components/explore-view";
-import { getVerifiedSpotsInBounds, getPendingCount } from "@/lib/supabase/queries.server";
+import {
+  getVerifiedSpotsInBounds,
+  getPendingCount,
+  getDistinctAmenities,
+  getDistinctClimbingGrades,
+} from "@/lib/supabase/queries.server";
 import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
 
 export const metadata: Metadata = {
@@ -21,13 +26,15 @@ export default async function ExplorePage({
   // identifies which marker should have its popup auto-opened once loaded.
   const focusSpotId = params.spot || undefined;
 
-  const [spots, pendingCount] = await Promise.all([
+  const [spots, pendingCount, availableAmenities, availableClimbingGrades] = await Promise.all([
     getVerifiedSpotsInBounds(initialBounds, {
       categories: parsed.categories ?? undefined,
       activity: parsed.activity,
       picnic: parsed.picnic,
     }),
     getPendingCount(),
+    getDistinctAmenities(),
+    getDistinctClimbingGrades(),
   ]);
 
   return (
@@ -39,6 +46,8 @@ export default async function ExplorePage({
       initialPicnic={parsed.picnic}
       initialCenter={parsed.lat !== null && parsed.lng !== null ? [parsed.lat, parsed.lng] : undefined}
       focusSpotId={focusSpotId}
+      availableAmenities={availableAmenities}
+      availableClimbingGrades={availableClimbingGrades}
     />
   );
 }

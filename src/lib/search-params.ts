@@ -1,6 +1,6 @@
 import type { SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
-import { boundingBox, type BoundingBox } from "@/lib/geo";
+import { boundingBox, clampRadiusMeters, isValidLatLng, type BoundingBox } from "@/lib/geo";
 
 // Shared by /explore and /results — both pages read the same querystring
 // shape the quiz produces (cats/activity/picnic/lat/lng/radius), so parsing
@@ -31,12 +31,20 @@ export type ParsedSearch = {
 export function parseSearchParams(
   params: Record<string, string | undefined>
 ): ParsedSearch {
+  const rawLat = parseNumber(params.lat);
+  const rawLng = parseNumber(params.lng);
+  // Out-of-range values (bad geocode, hand-edited URL) are treated as "no
+  // location" rather than passed through — feeding boundingBox a bogus
+  // lat/lng produces a nonsensical or near-global box instead of just
+  // falling back to the default center.
+  const hasLocation = rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
+
   return {
     categories: parseCategories(params.cats),
     activity: params.activity || undefined,
     picnic: params.picnic === "1",
-    lat: parseNumber(params.lat),
-    lng: parseNumber(params.lng),
+    lat: hasLocation ? rawLat : null,
+    lng: hasLocation ? rawLng : null,
     radiusMeters: parseNumber(params.radius),
   };
 }
@@ -59,6 +67,6 @@ export function boundsFromSearch(parsed: ParsedSearch): {
     parsed.lat !== null && parsed.lng !== null
       ? { lat: parsed.lat, lng: parsed.lng }
       : DEFAULT_CENTER;
-  const radius = parsed.radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS;
+  const radius = clampRadiusMeters(parsed.radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS);
   return { center, bounds: boundingBox(center.lat, center.lng, radius) };
 }
