@@ -96,6 +96,11 @@ export type SpotsInBoundsOptions = {
   // filters against the `activity_fit` array column (see dedup-cleanup.mjs)
   // rather than being a hard requirement for plain map browsing.
   activity?: string;
+  // `lounge` (small spots, per SIZE_ACTIVITY_DEFAULTS in dedup-cleanup.mjs)
+  // covers reading/relaxing but not picnicking — a bench-sized spot can't fit
+  // a picnic. Picnic-worthiness isn't its own activity_fit tag; `size_class`
+  // medium/large is the real, already-computed signal for "has an open area."
+  picnic?: boolean;
 };
 
 const DEFAULT_BOUNDS_LIMIT = 1000;
@@ -109,7 +114,7 @@ export async function fetchVerifiedSpotsInBounds(
   bounds: BoundingBox,
   options: SpotsInBoundsOptions = {}
 ): Promise<Spot[]> {
-  const { limit = DEFAULT_BOUNDS_LIMIT, categories, activity } = options;
+  const { limit = DEFAULT_BOUNDS_LIMIT, categories, activity, picnic } = options;
 
   // `categories: undefined` means "no filter"; `categories: []` means "filter
   // to nothing" and must return zero rows, not silently fall back to
@@ -136,6 +141,10 @@ export async function fetchVerifiedSpotsInBounds(
 
   if (activity) {
     query = query.overlaps("activity_fit", [activity]);
+  }
+
+  if (picnic) {
+    query = query.in("size_class", ["medium", "large"]);
   }
 
   const { data, error } = await query;

@@ -14,13 +14,22 @@ import type { SpotCategory } from "@/lib/types";
 // `tree` has 2 nationwide — guiding someone toward any of those is a
 // guaranteed "no spots match" dead end. `other` isn't a coherent intent.
 // All of those stay reachable through /explore's own category dropdown.
+//
+// "Picnic" is deliberately its own `kind`, not folded into `activity`:
+// `lounge` is only ever assigned to small spots (SIZE_ACTIVITY_DEFAULTS in
+// dedup-cleanup.mjs), which is a correct fit for reading/relaxing (a bench
+// is enough) but not for picnicking (needs an open field). There's no
+// activity_fit tag for "picnic" — `size_class` medium/large, already a real
+// computed column, is the honest signal for "has an open area."
 export type IntentOption =
   | { value: string; label: string; kind: "activity"; activity: string }
-  | { value: string; label: string; kind: "category"; category: SpotCategory };
+  | { value: string; label: string; kind: "category"; category: SpotCategory }
+  | { value: string; label: string; kind: "picnic" };
 
 export const INTENT_OPTIONS: IntentOption[] = [
   { value: "sports", label: "Get active", kind: "activity", activity: "sports" },
-  { value: "lounge", label: "Picnic, reading, or relaxing", kind: "activity", activity: "lounge" },
+  { value: "picnic", label: "Picnic", kind: "picnic" },
+  { value: "lounge", label: "Read or relax", kind: "activity", activity: "lounge" },
   { value: "walk", label: "Take a walk", kind: "activity", activity: "walk" },
   { value: "climbing", label: "Climb something", kind: "category", category: "climbing" },
   { value: "birdwatching", label: "Watch birds", kind: "category", category: "birdwatching" },

@@ -111,11 +111,13 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
     }
 
     const params = new URLSearchParams();
-    // Never both: activity-based intents leave categories unset so /explore
-    // defaults to every category and activity_fit does the real filtering;
-    // category-based intents are already a precise 1:1 match on their own.
+    // Exactly one filter, never combined: activity-based and picnic-based
+    // intents leave categories unset so /explore defaults to every category
+    // and the real filtering happens server-side; category-based intents are
+    // already a precise 1:1 match on their own.
     if (selected.kind === "activity") params.set("activity", selected.activity);
-    else params.set("cats", selected.category);
+    else if (selected.kind === "category") params.set("cats", selected.category);
+    else params.set("picnic", "1");
 
     if (address.trim()) {
       setSubmitting(true);

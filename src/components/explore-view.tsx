@@ -30,12 +30,14 @@ export function ExploreView({
   pendingCount,
   initialActiveCategories,
   initialActivity,
+  initialPicnic,
   initialCenter,
 }: {
   initialSpots: Spot[];
   pendingCount: number;
   initialActiveCategories?: SpotCategory[];
   initialActivity?: string;
+  initialPicnic?: boolean;
   initialCenter?: [number, number];
 }) {
   // Falls back to every category when the questionnaire didn't specify any
@@ -45,6 +47,7 @@ export function ExploreView({
     new Set(initialActiveCategories?.length ? initialActiveCategories : ALL_CATEGORIES)
   );
   const [activeActivity, setActiveActivity] = useState<string | undefined>(initialActivity);
+  const [activePicnic, setActivePicnic] = useState<boolean>(initialPicnic ?? false);
   const [visibleCount, setVisibleCount] = useState(initialSpots.length);
   const [mapMode, setMapMode] = useState<MapMode>("markers");
   const isHeatmapMode = mapMode === "heatmap";
@@ -85,6 +88,17 @@ export function ExploreView({
               Good for: {ACTIVITY_LABELS[activeActivity] ?? activeActivity}
               <XIcon aria-hidden="true" className="size-3" />
               <span className="sr-only">Clear activity filter</span>
+            </button>
+          )}
+          {activePicnic && (
+            <button
+              type="button"
+              onClick={() => setActivePicnic(false)}
+              className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
+            >
+              Good for: Picnic
+              <XIcon aria-hidden="true" className="size-3" />
+              <span className="sr-only">Clear picnic filter</span>
             </button>
           )}
         </div>
@@ -147,6 +161,7 @@ export function ExploreView({
           initialSpots={initialSpots}
           categories={activeCategories}
           activity={activeActivity}
+          picnic={activePicnic}
           initialCenter={initialCenter}
           onViewChange={({ count, mode }) => {
             setVisibleCount(count);
@@ -167,8 +182,8 @@ export function ExploreView({
                 <>
                   <p className="text-sm font-medium">No spots match these filters</p>
                   <p className="text-xs text-muted-foreground">
-                    {activeActivity
-                      ? "Try clearing the activity filter above, or turn a category back on."
+                    {activeActivity || activePicnic
+                      ? "Try clearing the filter chip above, or turn a category back on."
                       : "Turn a category back on above to see it on the map."}
                   </p>
                 </>
