@@ -6,8 +6,10 @@
 
 import { execFileSync } from "node:child_process";
 
+// NYC already has ~2858 osm-sourced rows from an earlier run — skipped here
+// to avoid re-querying and re-deduping a city that's already covered.
+// Portland skipped too — already ingested separately by a teammate.
 const CITIES = [
-  { name: "New York City", bbox: "40.4774,-74.2591,40.9176,-73.7002" },
   { name: "Los Angeles", bbox: "33.7037,-118.6682,34.3373,-118.1553" },
   { name: "Chicago", bbox: "41.6445,-87.9401,42.0230,-87.5237" },
   { name: "Houston", bbox: "29.5230,-95.7910,30.1100,-95.0140" },
@@ -22,7 +24,6 @@ const CITIES = [
   { name: "Denver", bbox: "39.6144,-105.1099,39.9142,-104.6002" },
   { name: "Boston", bbox: "42.2279,-71.1912,42.3969,-70.9860" },
   { name: "Nashville", bbox: "36.0198,-87.0492,36.3378,-86.5849" },
-  { name: "Portland", bbox: "45.4322,-122.8330,45.6528,-122.4720" },
   { name: "Las Vegas", bbox: "35.9531,-115.3866,36.3336,-114.9862" },
   { name: "Detroit", bbox: "42.2554,-83.2875,42.4505,-82.9105" },
   { name: "Miami", bbox: "25.6480,-80.3730,25.8557,-80.1246" },
