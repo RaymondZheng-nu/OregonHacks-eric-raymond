@@ -141,8 +141,15 @@ begin
       count(*) as count
     from spots
     where status = 'verified'
-      and lat between min_lat and max_lat
-      and lng between min_lng and max_lng
+      -- Qualified as spots.lat/spots.lng: this function's own OUT parameters
+      -- are also named lat/lng (see `returns table` above), so a bare
+      -- reference here is ambiguous between the column and the OUT param —
+      -- Postgres rejects it at call time with "column reference is ambiguous",
+      -- which silently broke every heatmap request since this function's
+      -- introduction (the client swallows the error and just keeps showing
+      -- the last successful markers-mode count).
+      and spots.lat between min_lat and max_lat
+      and spots.lng between min_lng and max_lng
     group by 1, 2
     limit 20000;
 end;
