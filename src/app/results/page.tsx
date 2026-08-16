@@ -52,28 +52,50 @@ export default async function ResultsPage({
   if (hasOrigin) {
     exploreParams.set("lat", String(parsed.lat));
     exploreParams.set("lng", String(parsed.lng));
-    if (parsed.radiusMeters) exploreParams.set("radius", String(parsed.radiusMeters));
+    if (parsed.radiusMeters)
+      exploreParams.set("radius", String(parsed.radiusMeters));
   }
 
   return (
     <div className="min-h-[100dvh]">
       <header className="border-b">
         <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4">
-          <Link href="/" className="font-logo text-lg tracking-tight text-green-700">
+          <Link
+            href="/"
+            className="font-logo text-lg tracking-tight text-green-700"
+          >
             TOUCH GRASS
           </Link>
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={
-              <Link href={`/explore?${exploreParams.toString()}`}>View all on the map</Link>
-            }
-          />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/#hero-cta">Retake quiz</Link>}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={
+                <Link href={`/explore?${exploreParams.toString()}`}>
+                  View all on the map
+                </Link>
+              }
+            />
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-[1400px] px-4 py-8">
-        <ResultsList spots={spotsWithDistance} exploreParams={exploreParams.toString()} />
+        <ResultsList
+          spots={spotsWithDistance}
+          exploreParams={exploreParams.toString()}
+          filters={{
+            categories: parsed.categories,
+            activity: parsed.activity,
+            picnic: parsed.picnic,
+          }}
+        />
       </main>
     </div>
   );
