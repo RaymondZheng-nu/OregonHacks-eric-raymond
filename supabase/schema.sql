@@ -107,24 +107,37 @@ create or replace function spot_density_grid(
   grid_size double precision default 0.05
 )
 returns table (lat double precision, lng double precision, count bigint)
-language sql
+language plpgsql
 stable
 as $$
-  -- Floored at 0.005 degrees (~500m): this RPC is reachable directly with
-  -- the anon key (no RLS on this table), so grid_size can't be trusted as
-  -- given. Unfloored, 0 divides by zero and a near-zero value produces
-  -- close to one bucket per row, defeating the bounded-payload guarantee
-  -- this function exists for. `limit` below is a second, independent cap.
-  select
-    round(spots.lat / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lat,
-    round(spots.lng / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lng,
-    count(*) as count
-  from spots
-  where status = 'verified'
-    and lat between min_lat and max_lat
-    and lng between min_lng and max_lng
-  group by 1, 2
-  limit 5000;
+begin
+  -- Same anon-reachability concern as the grid_size floor below: `limit`
+  -- only caps the aggregated *output*, not the scan+group-by cost that
+  -- happens before it. A world-sized bounds request would still force a
+  -- full scan of every verified row on each call. 20 degrees comfortably
+  -- covers a multi-state viewport (the widest legitimate use here) while
+  -- rejecting anything approaching global scale.
+  if (max_lat - min_lat) > 20 or (max_lng - min_lng) > 20 then
+    raise exception 'bounds span too large: max 20 degrees per axis';
+  end if;
+
+  return query
+    -- Floored at 0.005 degrees (~500m): this RPC is reachable directly with
+    -- the anon key (no RLS on this table), so grid_size can't be trusted as
+    -- given. Unfloored, 0 divides by zero and a near-zero value produces
+    -- close to one bucket per row, defeating the bounded-payload guarantee
+    -- this function exists for. `limit` below is a second, independent cap.
+    select
+      round(spots.lat / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lat,
+      round(spots.lng / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lng,
+      count(*) as count
+    from spots
+    where status = 'verified'
+      and lat between min_lat and max_lat
+      and lng between min_lng and max_lng
+    group by 1, 2
+    limit 5000;
+end;
 $$;
 
 -- Storage bucket for spot photos. Deterministic: always ends up public,

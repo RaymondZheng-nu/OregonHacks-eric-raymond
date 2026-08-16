@@ -130,7 +130,8 @@ export async function fetchVerifiedSpotsInBounds(
     query = query.in("category", categories);
   }
 
-  const { data } = await query;
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
   return (data ?? []) as Spot[];
 }
 
