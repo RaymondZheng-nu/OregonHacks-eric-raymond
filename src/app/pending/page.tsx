@@ -33,7 +33,7 @@ export default async function PendingPage() {
           <Button
             variant="outline"
             nativeButton={false}
-            render={<Link href="/explore">Back to map</Link>}
+            render={<Link href="/">Back to home</Link>}
           />
           <ThemeToggle />
         </div>
