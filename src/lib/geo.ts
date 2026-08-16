@@ -42,6 +42,64 @@ export function boundingBox(lat: number, lng: number, radiusMeters: number): Bou
 
 export type LatLng = { lat: number; lng: number };
 
+// Planar shoelace formula on an equirectangular projection centered at the
+// ring's own latitude. Not geodesically exact, but the error at city/park
+// scale is negligible relative to the area thresholds this feeds (hundreds
+// to thousands of m²) — the same proportionate-rigor tradeoff as the
+// haversine/boundingBox helpers above, not a survey-grade calculation.
+export function polygonAreaM2(ring: LatLng[]): number {
+  if (ring.length < 3) return 0;
+
+  const refLat = ring[0].lat;
+  const metersPerDegLng = METERS_PER_DEGREE_LAT * Math.cos(toRadians(refLat));
+  const points = ring.map((point) => ({
+    x: point.lng * metersPerDegLng,
+    y: point.lat * METERS_PER_DEGREE_LAT,
+  }));
+
+  let twiceArea = 0;
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    twiceArea += points[i].x * points[j].y - points[j].x * points[i].y;
+  }
+
+  return Math.abs(twiceArea) / 2;
+}
+
+// Unweighted average of a {lat,lng}-shaped ring's vertices — same
+// good-enough-for-a-pin approximation as ringCentroid below, but for OSM's
+// point shape rather than GeoJSON's [lng,lat] tuples (used when Overpass
+// geometry replaces the `center` field, which can't be requested together
+// with `out geom`).
+export function ringCentroidLatLng(ring: LatLng[]): LatLng | null {
+  if (!ring || ring.length === 0) return null;
+  const lat = ring.reduce((sum, point) => sum + point.lat, 0) / ring.length;
+  const lng = ring.reduce((sum, point) => sum + point.lng, 0) / ring.length;
+  return { lat, lng };
+}
+
+// Standard even-odd ray-casting test: does `point` fall inside `ring`? Used
+// to gate the containment/dedup merge on real polygon containment instead of
+// a radius guess — a park 300m from another park's centroid but outside its
+// actual boundary is a neighbor, not a sub-feature. Same planar-projection
+// tradeoff as polygonAreaM2 above (park/city scale, not survey-grade), and
+// the same ring shape it already produces.
+export function pointInPolygon(point: LatLng, ring: LatLng[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i].lng;
+    const yi = ring[i].lat;
+    const xj = ring[j].lng;
+    const yj = ring[j].lat;
+
+    const intersects =
+      yi > point.lat !== yj > point.lat &&
+      point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
 export type GeoJsonGeometry =
   | { type: "Point"; coordinates: [number, number] }
   | { type: "Polygon"; coordinates: number[][][] }
