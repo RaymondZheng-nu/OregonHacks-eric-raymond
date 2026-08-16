@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ChevronDownIcon, ClipboardListIcon, XIcon } from "lucide-react";
+import { ChevronDownIcon, ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -13,8 +13,8 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ACTIVITY_LABELS } from "@/lib/activities";
-import { CATEGORY_META } from "@/lib/categories";
+import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
+import { VIBE_OPTIONS } from "@/lib/vibes";
 import type { Spot, SpotCategory } from "@/lib/types";
 import type { MapMode } from "@/components/spot-map";
 
@@ -23,7 +23,14 @@ const SpotMap = dynamic(
   { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-muted" /> }
 );
 
-const ALL_CATEGORIES = Object.keys(CATEGORY_META) as SpotCategory[];
+// The quiz only ever sends `activity=` or `picnic=1`, never both, and both
+// map to a single vibe option's `value` (see src/lib/vibes.ts) — so the two
+// query params collapse into one piece of UI state instead of tracking them
+// independently, matching how the quiz itself only ever has one vibe picked.
+function vibeFromParams(activity?: string, picnic?: boolean): string | undefined {
+  if (picnic) return "picnic";
+  return activity;
+}
 
 export function ExploreView({
   initialSpots,
@@ -40,17 +47,22 @@ export function ExploreView({
   initialPicnic?: boolean;
   initialCenter?: [number, number];
 }) {
-  // Falls back to every category when the questionnaire didn't specify any
-  // (e.g. visiting /explore directly) — an empty initial Set would otherwise
-  // read as "nothing selected" and show a blank map on first load.
+  // Falls back to every selectable category when the questionnaire didn't
+  // specify any (e.g. visiting /explore directly) — an empty initial Set
+  // would otherwise read as "nothing selected" and show a blank map.
   const [activeCategories, setActiveCategories] = useState<Set<SpotCategory>>(
-    new Set(initialActiveCategories?.length ? initialActiveCategories : ALL_CATEGORIES)
+    new Set(initialActiveCategories?.length ? initialActiveCategories : SELECTABLE_CATEGORIES)
   );
-  const [activeActivity, setActiveActivity] = useState<string | undefined>(initialActivity);
-  const [activePicnic, setActivePicnic] = useState<boolean>(initialPicnic ?? false);
+  const [activeVibe, setActiveVibe] = useState<string | undefined>(
+    vibeFromParams(initialActivity, initialPicnic)
+  );
   const [visibleCount, setVisibleCount] = useState(initialSpots.length);
   const [mapMode, setMapMode] = useState<MapMode>("markers");
   const isHeatmapMode = mapMode === "heatmap";
+
+  const selectedVibe = VIBE_OPTIONS.find((option) => option.value === activeVibe);
+  const activeActivity = selectedVibe?.kind === "activity" ? selectedVibe.activity : undefined;
+  const activePicnic = selectedVibe?.kind === "picnic";
 
   function toggleCategory(category: SpotCategory) {
     setActiveCategories((prev) => {
@@ -62,6 +74,10 @@ export function ExploreView({
       }
       return next;
     });
+  }
+
+  function selectVibe(value: string) {
+    setActiveVibe((prev) => (prev === value ? undefined : value));
   }
 
   return (
@@ -79,28 +95,6 @@ export function ExploreView({
           <p className="text-sm text-muted-foreground">
             {visibleCount} green spaces & nature spots in this view
           </p>
-          {activeActivity && (
-            <button
-              type="button"
-              onClick={() => setActiveActivity(undefined)}
-              className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
-            >
-              Good for: {ACTIVITY_LABELS[activeActivity] ?? activeActivity}
-              <XIcon aria-hidden="true" className="size-3" />
-              <span className="sr-only">Clear activity filter</span>
-            </button>
-          )}
-          {activePicnic && (
-            <button
-              type="button"
-              onClick={() => setActivePicnic(false)}
-              className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/15"
-            >
-              Good for: Picnic
-              <XIcon aria-hidden="true" className="size-3" />
-              <span className="sr-only">Clear picnic filter</span>
-            </button>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-col gap-1">
@@ -110,18 +104,18 @@ export function ExploreView({
                 disabled={isHeatmapMode}
                 render={<Button variant="outline" disabled={isHeatmapMode} />}
               >
-                Categories ({activeCategories.size}/{ALL_CATEGORIES.length})
+                Categories ({activeCategories.size}/{SELECTABLE_CATEGORIES.length})
                 <ChevronDownIcon
                   aria-hidden="true"
                   className="size-4 text-muted-foreground"
                 />
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {Object.entries(CATEGORY_META).map(([key, meta]) => {
-                  const category = key as SpotCategory;
+                {SELECTABLE_CATEGORIES.map((category) => {
+                  const meta = CATEGORY_META[category];
                   return (
                     <DropdownMenuCheckboxItem
-                      key={key}
+                      key={category}
                       checked={activeCategories.has(category)}
                       onCheckedChange={() => toggleCategory(category)}
                     >
@@ -136,12 +130,40 @@ export function ExploreView({
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            {isHeatmapMode && (
-              <p className="text-xs text-muted-foreground">
-                Zoom in to filter by category
-              </p>
-            )}
           </div>
+          <div className="flex flex-col gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Filter by vibe"
+                disabled={isHeatmapMode}
+                render={<Button variant="outline" disabled={isHeatmapMode} />}
+              >
+                Vibe: {selectedVibe?.label ?? "Everything"}
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground"
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {/* Reuses the checkbox item visually, but single-select is
+                    enforced by selectVibe clearing any other pick — this
+                    codebase has no radio-item menu primitive, and the quiz's
+                    own vibe question already single-selects the same way. */}
+                {VIBE_OPTIONS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.value}
+                    checked={activeVibe === option.value}
+                    onCheckedChange={() => selectVibe(option.value)}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {isHeatmapMode && (
+            <p className="text-xs text-muted-foreground">Zoom in to filter</p>
+          )}
           <Button
             variant="outline"
             nativeButton={false}
@@ -182,8 +204,8 @@ export function ExploreView({
                 <>
                   <p className="text-sm font-medium">No spots match these filters</p>
                   <p className="text-xs text-muted-foreground">
-                    {activeActivity || activePicnic
-                      ? "Try clearing the filter chip above, or turn a category back on."
+                    {selectedVibe
+                      ? "Try setting Vibe back to Everything, or turn a category back on."
                       : "Turn a category back on above to see it on the map."}
                   </p>
                 </>

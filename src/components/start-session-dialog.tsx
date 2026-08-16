@@ -17,12 +17,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { INTENT_OPTIONS } from "@/lib/intents";
+import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
+import { VIBE_OPTIONS } from "@/lib/vibes";
 import { cn } from "@/lib/utils";
+import type { SpotCategory } from "@/lib/types";
 
 const MILES_TO_METERS = 1609.34;
 const MY_LOCATION_LABEL = "My current location";
-const TOTAL_STEPS = 2;
+const TOTAL_STEPS = 3;
 
 async function geocodeAddress(
   address: string
@@ -50,7 +52,8 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const [intent, setIntent] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
+  const [vibe, setVibe] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [address, setAddress] = useState("");
@@ -59,16 +62,25 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
     lng: number;
   } | null>(null);
   const [maxMiles, setMaxMiles] = useState("5");
-  const [errors, setErrors] = useState<{ intent?: string; address?: string }>({});
+  const [errors, setErrors] = useState<{ categories?: string; address?: string }>({});
 
-  function selectIntent(value: string) {
-    setIntent(value);
-    setErrors((prev) => ({ ...prev, intent: undefined }));
+  function toggleCategory(category: SpotCategory) {
+    setCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+    setErrors((prev) => ({ ...prev, categories: undefined }));
+  }
+
+  function selectVibe(value: string) {
+    setVibe((prev) => (prev === value ? null : value));
   }
 
   function goNext() {
-    if (step === 0 && !intent) {
-      setErrors((prev) => ({ ...prev, intent: "Pick one to continue" }));
+    if (step === 0 && categories.size === 0) {
+      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
       return;
     }
     setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
@@ -104,20 +116,19 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const selected = INTENT_OPTIONS.find((option) => option.value === intent);
-    if (!selected) {
-      setErrors((prev) => ({ ...prev, intent: "Pick one to continue" }));
+    if (categories.size === 0) {
+      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
       return;
     }
 
     const params = new URLSearchParams();
-    // Exactly one filter, never combined: activity-based and picnic-based
-    // intents leave categories unset so /explore defaults to every category
-    // and the real filtering happens server-side; category-based intents are
-    // already a precise 1:1 match on their own.
-    if (selected.kind === "activity") params.set("activity", selected.activity);
-    else if (selected.kind === "category") params.set("cats", selected.category);
-    else params.set("picnic", "1");
+    params.set("cats", Array.from(categories).join(","));
+
+    const selectedVibe = VIBE_OPTIONS.find((option) => option.value === vibe);
+    if (selectedVibe) {
+      if (selectedVibe.kind === "activity") params.set("activity", selectedVibe.activity);
+      else params.set("picnic", "1");
+    }
 
     if (address.trim()) {
       setSubmitting(true);
@@ -183,10 +194,49 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
           >
             {step === 0 && (
               <div className="space-y-2">
-                <Label>What&apos;s calling you outside?</Label>
+                <Label>What are you into?</Label>
                 <div className="flex flex-wrap gap-2">
-                  {INTENT_OPTIONS.map((option) => {
-                    const active = intent === option.value;
+                  {SELECTABLE_CATEGORIES.map((category) => {
+                    const meta = CATEGORY_META[category];
+                    const active = categories.has(category);
+                    return (
+                      <Badge
+                        key={category}
+                        variant="outline"
+                        render={
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => toggleCategory(category)}
+                          />
+                        }
+                        className={cn(
+                          "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                          !active && "opacity-40"
+                        )}
+                        style={{
+                          borderColor: meta.color,
+                          color: active ? meta.color : undefined,
+                          backgroundColor: active ? `${meta.color}1a` : undefined,
+                        }}
+                      >
+                        {meta.label}
+                      </Badge>
+                    );
+                  })}
+                </div>
+                {errors.categories && (
+                  <p className="text-xs text-destructive">{errors.categories}</p>
+                )}
+              </div>
+            )}
+
+            {step === 1 && (
+              <div className="space-y-2">
+                <Label>What&apos;s the vibe? (optional)</Label>
+                <div className="flex flex-wrap gap-2">
+                  {VIBE_OPTIONS.map((option) => {
+                    const active = vibe === option.value;
                     return (
                       <Badge
                         key={option.value}
@@ -195,7 +245,7 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
                           <button
                             type="button"
                             aria-pressed={active}
-                            onClick={() => selectIntent(option.value)}
+                            onClick={() => selectVibe(option.value)}
                           />
                         }
                         className={cn(
@@ -210,13 +260,10 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
                     );
                   })}
                 </div>
-                {errors.intent && (
-                  <p className="text-xs text-destructive">{errors.intent}</p>
-                )}
               </div>
             )}
 
-            {step === 1 && (
+            {step === 2 && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="address">Where are you?</Label>
