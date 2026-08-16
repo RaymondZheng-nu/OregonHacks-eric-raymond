@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { FeaturedSpotlight } from "@/components/featured-spotlight";
+import { SpotlightCarousel } from "@/components/spotlight-carousel";
 import { StartSessionDialog } from "@/components/start-session-dialog";
 import { StickyMobileCta } from "@/components/sticky-mobile-cta";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { CATEGORY_META } from "@/lib/categories";
 import { getFeaturedSpots, getPendingCount } from "@/lib/supabase/queries.server";
 
-const FEATURED_COUNT = 6;
+// First CAROUSEL_COUNT feed the hero carousel, the rest fill the grid below.
+const CAROUSEL_COUNT = 5;
+const GRID_COUNT = 6;
+const FEATURED_COUNT = CAROUSEL_COUNT + GRID_COUNT;
 
 export const metadata: Metadata = {
   title: "Find Real Parks & Nature Spots Near You",
@@ -24,7 +26,8 @@ export default async function LandingPage() {
     getFeaturedSpots(FEATURED_COUNT),
     getPendingCount(),
   ]);
-  const [heroSpot, ...restFeatured] = featured;
+  const carouselSpots = featured.slice(0, CAROUSEL_COUNT);
+  const restFeatured = featured.slice(CAROUSEL_COUNT);
 
   return (
     <div className="min-h-[100dvh]">
@@ -79,34 +82,7 @@ export default async function LandingPage() {
           </div>
         </div>
 
-        {heroSpot && (
-          <div className="relative aspect-4/3 w-full overflow-hidden rounded-2xl md:aspect-square">
-            {heroSpot.photo_url ? (
-              <Image
-                src={heroSpot.photo_url}
-                alt={heroSpot.name}
-                fill
-                priority
-                sizes="(min-width: 768px) 50vw, 100vw"
-                className="object-cover"
-              />
-            ) : (
-              <div
-                className="h-full w-full"
-                style={{
-                  backgroundColor: `${CATEGORY_META[heroSpot.category].color}26`,
-                }}
-                aria-hidden="true"
-              />
-            )}
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-              <p className="text-sm font-medium text-white">{heroSpot.name}</p>
-              <p className="text-xs text-white/80">
-                {CATEGORY_META[heroSpot.category].label}
-              </p>
-            </div>
-          </div>
-        )}
+        <SpotlightCarousel spots={carouselSpots} />
       </section>
 
       {restFeatured.length > 0 && (
