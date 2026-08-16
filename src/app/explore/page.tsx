@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { ExploreView } from "@/components/explore-view";
-import { getVerifiedSpotsInBounds, getPendingCount } from "@/lib/supabase/queries.server";
+import {
+  getVerifiedSpotsInBounds,
+  getPendingCount,
+  getDistinctAmenities,
+  getDistinctClimbingGrades,
+} from "@/lib/supabase/queries.server";
 import { boundingBox } from "@/lib/geo";
 import type { SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
@@ -50,11 +55,13 @@ export default async function ExplorePage({
   const radius = radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS;
   const initialBounds = boundingBox(center.lat, center.lng, radius);
 
-  const [spots, pendingCount] = await Promise.all([
+  const [spots, pendingCount, availableAmenities, availableClimbingGrades] = await Promise.all([
     getVerifiedSpotsInBounds(initialBounds, {
       categories: categories ?? undefined,
     }),
     getPendingCount(),
+    getDistinctAmenities(),
+    getDistinctClimbingGrades(),
   ]);
 
   return (
@@ -63,6 +70,8 @@ export default async function ExplorePage({
       pendingCount={pendingCount}
       initialActiveCategories={categories ?? undefined}
       initialCenter={lat !== null && lng !== null ? [lat, lng] : undefined}
+      availableAmenities={availableAmenities}
+      availableClimbingGrades={availableClimbingGrades}
     />
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ChevronDownIcon, ClipboardListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,13 +24,49 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CATEGORY_META } from "@/lib/categories";
+import { cn } from "@/lib/utils";
 import type { Spot, SpotCategory } from "@/lib/types";
-import type { MapMode } from "@/components/spot-map";
+import type { AdvancedFilters, MapMode } from "@/components/spot-map";
 
 // Matches queries.ts's JUNK_AREA_FLOOR_M2 — the query layer clamps any value
 // below this back up to it, so the slider's floor mirrors what the server
 // actually enforces instead of implying a lower value would do anything.
 const MIN_PARK_AREA_FLOOR_M2 = 150;
+
+// Fixed, unlike amenities/climbing grades below — size_class is a closed
+// enum computed by the dedup-cleanup pipeline (schema.sql), not open-ended
+// tag data, so there's nothing to discover dynamically here.
+const SIZE_CLASSES = ["small", "medium", "large"] as const;
+
+function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
+}
+
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Badge
+      variant="outline"
+      render={<button type="button" aria-pressed={active} onClick={onClick} />}
+      className={cn(
+        "h-8 cursor-pointer select-none px-3 capitalize transition-[opacity,background-color,color] duration-200 ease-out",
+        !active && "opacity-40"
+      )}
+    >
+      {children}
+    </Badge>
+  );
+}
 
 const SpotMap = dynamic(
   () => import("@/components/spot-map").then((m) => m.SpotMap),
@@ -43,11 +80,15 @@ export function ExploreView({
   pendingCount,
   initialActiveCategories,
   initialCenter,
+  availableAmenities,
+  availableClimbingGrades,
 }: {
   initialSpots: Spot[];
   pendingCount: number;
   initialActiveCategories?: SpotCategory[];
   initialCenter?: [number, number];
+  availableAmenities: string[];
+  availableClimbingGrades: string[];
 }) {
   // Falls back to every category when the questionnaire didn't specify any
   // (e.g. visiting /explore directly) — an empty initial Set would otherwise
@@ -58,7 +99,22 @@ export function ExploreView({
   const [visibleCount, setVisibleCount] = useState(initialSpots.length);
   const [mapMode, setMapMode] = useState<MapMode>("markers");
   const [minParkAreaM2, setMinParkAreaM2] = useState(MIN_PARK_AREA_FLOOR_M2);
+  const [sizeClasses, setSizeClasses] = useState<Set<string>>(new Set());
+  const [amenities, setAmenities] = useState<Set<string>>(new Set());
+  const [wheelchairAccessibleOnly, setWheelchairAccessibleOnly] = useState(false);
+  const [climbingGrades, setClimbingGrades] = useState<Set<string>>(new Set());
   const isHeatmapMode = mapMode === "heatmap";
+  const isClimbingActive = activeCategories.has("climbing");
+
+  const advancedFilters: AdvancedFilters = useMemo(
+    () => ({
+      sizeClasses: sizeClasses.size > 0 ? Array.from(sizeClasses) : undefined,
+      amenities: amenities.size > 0 ? Array.from(amenities) : undefined,
+      wheelchairAccessibleOnly: wheelchairAccessibleOnly || undefined,
+      climbingGrades: climbingGrades.size > 0 ? Array.from(climbingGrades) : undefined,
+    }),
+    [sizeClasses, amenities, wheelchairAccessibleOnly, climbingGrades]
+  );
 
   function toggleCategory(category: SpotCategory) {
     setActiveCategories((prev) => {
@@ -141,28 +197,100 @@ export function ExploreView({
               <DialogHeader>
                 <DialogTitle>Advanced settings</DialogTitle>
               </DialogHeader>
-              <div className="space-y-2">
-                <Label htmlFor="min-park-area">Minimum park size (m²)</Label>
-                <Input
-                  id="min-park-area"
-                  type="number"
-                  min={MIN_PARK_AREA_FLOOR_M2}
-                  step={50}
-                  value={minParkAreaM2}
-                  onChange={(e) => {
-                    const parsed = Number(e.target.value);
-                    setMinParkAreaM2(
-                      Number.isFinite(parsed)
-                        ? Math.max(parsed, MIN_PARK_AREA_FLOOR_M2)
-                        : MIN_PARK_AREA_FLOOR_M2
-                    );
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Filters out traffic islands and other junk-sized
-                  &ldquo;park&rdquo; spots. Only applies to the park and other categories —
-                  climbing, gardens, and the rest are unaffected.
-                </p>
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="min-park-area">Minimum park size (m²)</Label>
+                  <Input
+                    id="min-park-area"
+                    type="number"
+                    min={MIN_PARK_AREA_FLOOR_M2}
+                    step={50}
+                    value={minParkAreaM2}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      setMinParkAreaM2(
+                        Number.isFinite(parsed)
+                          ? Math.max(parsed, MIN_PARK_AREA_FLOOR_M2)
+                          : MIN_PARK_AREA_FLOOR_M2
+                      );
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Filters out traffic islands and other junk-sized
+                    &ldquo;park&rdquo; spots. Only applies to the park and other categories —
+                    climbing, gardens, and the rest are unaffected.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Size</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {SIZE_CLASSES.map((size) => (
+                      <FilterChip
+                        key={size}
+                        active={sizeClasses.has(size)}
+                        onClick={() => setSizeClasses((prev) => toggleInSet(prev, size))}
+                      >
+                        {size}
+                      </FilterChip>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Only spots with a known size are affected — leave all
+                    unselected to include everything regardless of size.
+                  </p>
+                </div>
+
+                {availableAmenities.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Amenities</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {availableAmenities.map((amenity) => (
+                        <FilterChip
+                          key={amenity}
+                          active={amenities.has(amenity)}
+                          onClick={() => setAmenities((prev) => toggleInSet(prev, amenity))}
+                        >
+                          {amenity.replace(/_/g, " ")}
+                        </FilterChip>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="wheelchair-only" className="cursor-pointer">
+                    Wheelchair accessible only
+                  </Label>
+                  <input
+                    id="wheelchair-only"
+                    type="checkbox"
+                    checked={wheelchairAccessibleOnly}
+                    onChange={(e) => setWheelchairAccessibleOnly(e.target.checked)}
+                    className="size-4 accent-primary"
+                  />
+                </div>
+
+                {isClimbingActive && availableClimbingGrades.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Climbing grade</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {availableClimbingGrades.map((grade) => (
+                        <FilterChip
+                          key={grade}
+                          active={climbingGrades.has(grade)}
+                          onClick={() => setClimbingGrades((prev) => toggleInSet(prev, grade))}
+                        >
+                          {grade}
+                        </FilterChip>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Grades are shown exactly as tagged in OpenStreetMap —
+                      French and YDS scales aren&apos;t converted between each other.
+                    </p>
+                  </div>
+                )}
               </div>
             </DialogContent>
           </Dialog>
@@ -186,6 +314,7 @@ export function ExploreView({
           categories={activeCategories}
           initialCenter={initialCenter}
           minParkAreaM2={minParkAreaM2}
+          advancedFilters={advancedFilters}
           onViewChange={({ count, mode }) => {
             setVisibleCount(count);
             setMapMode(mode);

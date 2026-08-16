@@ -38,3 +38,11 @@ export async function getPendingSpots() {
 export async function getPendingCount() {
   return fetchPendingCount(await createClient());
 }
+
+export async function getDistinctAmenities() {
+  return fetchDistinctAmenities(await createClient());
+}
+
+export async function getDistinctClimbingGrades() {
+  return fetchDistinctClimbingGrades(await createClient());
+}
