@@ -6,6 +6,7 @@ next-env.d.ts
 /CLAUDE.md
 *.tsbuildinfo
 /HANDOFF.md
+/backups/
 /build
 .env*.local
 .DS_Store

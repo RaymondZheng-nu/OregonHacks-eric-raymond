@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
+    "backup:spots": "node --env-file=.env.local scripts/backup-spots.mjs",
     "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs",
     "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs",
     "ingest:osm:cities": "node --env-file=.env.local scripts/ingest-osm-cities.mjs",
