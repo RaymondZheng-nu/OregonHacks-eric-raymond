@@ -17,17 +17,19 @@
 //     `Category:X` is skipped — picking "the" representative image for a
 //     whole category reliably needs another API round-trip and judgment
 //     call this pass doesn't make; a candidate for a later pass.
-//   - `wikipedia`: `lang:Title` is resolved via Wikipedia's REST summary
-//     API (`.../page/summary/Title`), preferring `originalimage.source`
-//     over the lower-res `thumbnail.source`. Articles with no lead image
-//     (stubs, disambiguation pages) are skipped, not guessed at.
+//   - `wikipedia`: `lang:Title` is resolved via Wikipedia's REST summary API
+//     (`.../page/summary/Title`), using `thumbnail.source` — not the higher-
+//     res `originalimage.source`, which Wikimedia's CDN 429s automated
+//     clients for and explicitly says to request a thumbnail size instead
+//     (confirmed live). Articles with no lead image (stubs, disambiguation
+//     pages) are skipped, not guessed at.
 //
 // Read-only against Supabase (only reads current status/photo_url to avoid
 // clobbering anything already set, or a row that's since been rejected/
 // merged) and against Wikimedia's own public APIs. Writes only a local
 // report + generated SQL — never applied automatically.
 //
-// Usage: node --env-file=.env.local scripts/backfill-photos.mjs [--areas=backups/area-backfill-....json]
+// Usage: node --env-file=.env.local scripts/backfill-photos.mjs [--areas=backups/area-backfill-....json] [--skip-resolved=backups/photo-backfill-....json] [--pause-ms=150]
 
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -40,10 +42,12 @@ const backupsDir = path.join(__dirname, "../backups");
 const USER_AGENT = "NearbyNature/1.0 (OregonHacks hackathon project, photo backfill)";
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5000;
-const PAUSE_BETWEEN_CALLS_MS = 150;
 const IMAGE_EXTENSION_RE = /\.(jpe?g|png|gif|webp)(?:[?#].*)?$/i;
 
 const areasArg = process.argv.find((arg) => arg.startsWith("--areas="));
+const skipResolvedArg = process.argv.find((arg) => arg.startsWith("--skip-resolved="));
+const pauseMsArg = process.argv.find((arg) => arg.startsWith("--pause-ms="));
+const PAUSE_BETWEEN_CALLS_MS = pauseMsArg ? Number(pauseMsArg.replace("--pause-ms=", "")) : 150;
 
 function resolveAreasFile() {
   if (areasArg) return areasArg.replace("--areas=", "");
@@ -167,11 +171,23 @@ async function main() {
   console.log(`Reading ${areasPath}...`);
   const { areas } = JSON.parse(readFileSync(areasPath, "utf-8"));
 
-  const candidates = areas.filter((a) => {
+  let candidates = areas.filter((a) => {
     const t = a.tags ?? {};
     return Boolean(t.image || t.wikimedia_commons?.startsWith("File:") || t.wikipedia);
   });
   console.log(`${candidates.length} rows carry a resolvable image tag (image/wikimedia_commons File:/wikipedia).`);
+
+  // Retry mode: skip whatever a previous run already resolved, so re-running
+  // with gentler pacing only spends time (and Wikimedia's patience) on the
+  // ones that actually failed last time.
+  if (skipResolvedArg) {
+    const prevPath = skipResolvedArg.replace("--skip-resolved=", "");
+    const prev = JSON.parse(readFileSync(prevPath, "utf-8"));
+    const alreadyResolved = new Set(prev.results.map((r) => r.id));
+    const before = candidates.length;
+    candidates = candidates.filter((c) => !alreadyResolved.has(c.id));
+    console.log(`Skipping ${before - candidates.length} already resolved by ${prevPath} — ${candidates.length} left to retry.`);
+  }
 
   // Cross-check against the live table so this never clobbers a photo set
   // since the area-backfill snapshot was taken, or touches a row that's no
