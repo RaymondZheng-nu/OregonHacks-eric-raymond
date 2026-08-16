@@ -5,7 +5,7 @@ create table if not exists spots (
   description text,
   category text not null, -- 'park' | 'tree' | 'garden' | 'climbing' | 'birdwatching' | 'other'
   source text not null default 'user', -- 'official' (city/state open-data portal) | 'user' (self-reported) | 'osm' (OpenStreetMap) | 'reddit' (social-sourced mention)
-  status text not null default 'verified', -- 'pending' | 'verified'
+  status text not null default 'verified', -- 'pending' | 'verified' | 'rejected' (junk, size-filtered) | 'merged' (collapsed into a parent, see merged_into)
   confirm_count integer not null default 0,
   lat double precision not null,
   lng double precision not null,
@@ -17,6 +17,26 @@ create table if not exists spots (
 -- so re-running an ingestion job is idempotent via `upsert(..., { onConflict })`
 -- against the unique index below, instead of fragile check-then-insert logic.
 alter table spots add column if not exists external_id text;
+
+-- Added for the data-quality cleanup pass (junk-sized spots + nested
+-- duplicates like Brooklyn Botanic Garden's ~20 separate sub-garden pins).
+-- All nullable/additive, same precedent as external_id above.
+--
+-- area_m2: computed footprint for way/relation-derived OSM rows, used to
+-- distinguish a real visitable green space from a street planter or median.
+-- Null means "no area data" (node-derived, a non-OSM source, or not yet
+-- backfilled) — always exempt from the size filter, not treated as zero.
+alter table spots add column if not exists area_m2 double precision;
+-- features: for a parent spot that absorbed nested sub-features, their
+-- names (e.g. Brooklyn Botanic Garden -> {"Rose Garden","Cherry Esplanade"})
+-- — so that information is preserved instead of lost when the children are
+-- hidden from the map via status='merged'.
+alter table spots add column if not exists features text[];
+-- merged_into: for a child row collapsed into a parent, the parent's id.
+-- Kept as an audit trail rather than deleting the row outright — a bad
+-- merge is reversible with a single UPDATE (status='verified', merged_into
+-- = null) instead of requiring a restore from backup.
+alter table spots add column if not exists merged_into uuid references spots(id);
 
 create index if not exists spots_category_idx on spots (category);
 
