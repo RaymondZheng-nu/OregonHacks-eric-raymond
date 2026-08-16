@@ -13,6 +13,7 @@
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "backup:spots": "node --env-file=.env.local scripts/backup-spots.mjs",
     "backfill:area": "node scripts/backfill-area.mjs",
+    "backfill:photos": "node --env-file=.env.local scripts/backfill-photos.mjs",
     "dedup:cleanup": "node scripts/dedup-cleanup.mjs",
     "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs",
     "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs",
