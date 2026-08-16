@@ -24,6 +24,20 @@ function InvalidateSizeOnMount() {
   return null;
 }
 
+// react-leaflet only reads MapContainer's `center`/`zoom` props once, at
+// construction — they're not reactive like a normal controlled prop. The
+// results popup reuses a single SpotLocationPreview instance while paging
+// through spots (only lat/lng change underneath it), so without this the
+// view stayed stuck on whichever spot happened to be first, even though
+// the Marker itself (a genuinely reactive react-leaflet component) moved.
+function RecenterOnChange({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView([lat, lng], PREVIEW_ZOOM);
+  }, [map, lat, lng]);
+  return null;
+}
+
 // Interactive-but-locked fallback for a spot with no real photo — a small
 // live map centered on the spot instead of a flat color tile, so "no photo"
 // still shows something real. Dragging is off by default: this is a location
@@ -58,6 +72,7 @@ export function SpotLocationPreview({
         icon={markerIcon(CATEGORY_META[category].color)}
       />
       <InvalidateSizeOnMount />
+      <RecenterOnChange lat={lat} lng={lng} />
     </MapContainer>
   );
 }
