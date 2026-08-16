@@ -34,6 +34,12 @@ const CITIES = [
   { name: "Pittsburgh", bbox: "40.3608,-80.0958,40.5028,-79.8654" },
   { name: "Charlotte", bbox: "35.0353,-81.0130,35.3822,-80.6803" },
   { name: "Salt Lake City", bbox: "40.6198,-112.0410,40.8025,-111.7397" },
+  { name: "Jacksonville", bbox: "30.1000,-81.8800,30.5800,-81.3900" },
+  { name: "Columbus", bbox: "39.8300,-83.1500,40.1600,-82.8100" },
+  { name: "Fort Worth", bbox: "32.5500,-97.5300,32.9200,-97.0700" },
+  { name: "San Jose", bbox: "37.1200,-122.0450,37.4700,-121.7300" },
+  { name: "Indianapolis", bbox: "39.6300,-86.3500,39.9300,-85.9400" },
+  { name: "Baltimore", bbox: "39.1970,-76.7100,39.3720,-76.5300" },
 ];
 
 // Gives the public Overpass instance breathing room between back-to-back

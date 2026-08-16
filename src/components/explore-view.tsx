@@ -3,9 +3,18 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ChevronDownIcon, ClipboardListIcon } from "lucide-react";
+import { ChevronDownIcon, ClipboardListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   DropdownMenu,
@@ -16,6 +25,11 @@ import {
 import { CATEGORY_META } from "@/lib/categories";
 import type { Spot, SpotCategory } from "@/lib/types";
 import type { MapMode } from "@/components/spot-map";
+
+// Matches queries.ts's JUNK_AREA_FLOOR_M2 — the query layer clamps any value
+// below this back up to it, so the slider's floor mirrors what the server
+// actually enforces instead of implying a lower value would do anything.
+const MIN_PARK_AREA_FLOOR_M2 = 150;
 
 const SpotMap = dynamic(
   () => import("@/components/spot-map").then((m) => m.SpotMap),
@@ -43,6 +57,7 @@ export function ExploreView({
   );
   const [visibleCount, setVisibleCount] = useState(initialSpots.length);
   const [mapMode, setMapMode] = useState<MapMode>("markers");
+  const [minParkAreaM2, setMinParkAreaM2] = useState(MIN_PARK_AREA_FLOOR_M2);
   const isHeatmapMode = mapMode === "heatmap";
 
   function toggleCategory(category: SpotCategory) {
@@ -113,6 +128,44 @@ export function ExploreView({
               </p>
             )}
           </div>
+          <Dialog>
+            <DialogTrigger
+              render={
+                <Button variant="outline">
+                  <SlidersHorizontalIcon aria-hidden="true" />
+                  Advanced
+                </Button>
+              }
+            />
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle>Advanced settings</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label htmlFor="min-park-area">Minimum park size (m²)</Label>
+                <Input
+                  id="min-park-area"
+                  type="number"
+                  min={MIN_PARK_AREA_FLOOR_M2}
+                  step={50}
+                  value={minParkAreaM2}
+                  onChange={(e) => {
+                    const parsed = Number(e.target.value);
+                    setMinParkAreaM2(
+                      Number.isFinite(parsed)
+                        ? Math.max(parsed, MIN_PARK_AREA_FLOOR_M2)
+                        : MIN_PARK_AREA_FLOOR_M2
+                    );
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Filters out traffic islands and other junk-sized
+                  &ldquo;park&rdquo; spots. Only applies to the park and other categories —
+                  climbing, gardens, and the rest are unaffected.
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Button
             variant="outline"
             nativeButton={false}
@@ -132,6 +185,7 @@ export function ExploreView({
           initialSpots={initialSpots}
           categories={activeCategories}
           initialCenter={initialCenter}
+          minParkAreaM2={minParkAreaM2}
           onViewChange={({ count, mode }) => {
             setVisibleCount(count);
             setMapMode(mode);

@@ -45,27 +45,6 @@ export async function fetchVerifiedSpots(
   return allSpots;
 }
 
-// Queried directly by "has a photo" rather than pulling fetchVerifiedSpots()
-// and slicing client-side: that table is well past Supabase's 1000-row
-// response cap, and ordering by created_at desc means the oldest rows (the
-// original seeded parks, which are the ones with real photos) fall outside
-// the returned window entirely once total verified spots exceeds 1000.
-export async function fetchFeaturedSpots(
-  supabase: SupabaseClient,
-  limit: number
-): Promise<Spot[]> {
-  const { data } = await supabase
-    .from("spots")
-    .select("*")
-    .eq("status", "verified")
-    .not("photo_url", "is", null)
-    .not("photo_url", "ilike", "%picsum.photos%")
-    .order("confirm_count", { ascending: false })
-    .limit(limit);
-
-  return (data ?? []) as Spot[];
-}
-
 export async function fetchPendingSpots(
   supabase: SupabaseClient
 ): Promise<Spot[]> {
@@ -92,9 +71,37 @@ export async function fetchPendingSpots(
 export type SpotsInBoundsOptions = {
   limit?: number;
   categories?: SpotCategory[];
+  // Overrides JUNK_AREA_FLOOR_M2 below — exposed so the map's advanced
+  // settings can raise the bar above the default junk floor (e.g. "only
+  // parks over 2000 m²"). Never goes below the default: this is a stricter
+  // override, not a way to re-admit sub-floor junk that query-time filtering
+  // already excludes.
+  minParkAreaM2?: number;
+  // Below: all optional, all no-ops unless the row actually has the data —
+  // size_class/amenities/accessibility are populated by the dedup-cleanup
+  // pipeline's tagging pass (see schema.sql), so rows this hasn't reached
+  // yet just won't match a non-empty filter, same as a genuinely-unset value.
+  sizeClasses?: string[];
+  amenities?: string[];
+  wheelchairAccessibleOnly?: boolean;
+  // Applied only when relevant (category = 'climbing'); grade strings aren't
+  // a single orderable scale (French vs YDS), so this is an exact-match set,
+  // not a numeric range.
+  climbingGrades?: string[];
 };
 
 const DEFAULT_BOUNDS_LIMIT = 1000;
+
+// Same floor as scripts/dedup-cleanup.mjs's HARD_REJECT_FLOOR_M2, kept in
+// sync deliberately: that offline script only fixes up spots it's manually
+// run against, so a junk-sized traffic median or street planter that's
+// already `verified` (or added after the last cleanup pass) would otherwise
+// still render. This applies the same threshold live, at read time, so the
+// map never shows what the batch cleanup would also reject. `area_m2 is
+// null` stays exempt — most non-OSM-way spots (user submissions, OSM nodes)
+// never have an area at all, and null means "unknown," not "tiny."
+const JUNK_FILTERED_CATEGORIES: SpotCategory[] = ["park", "other"];
+const JUNK_AREA_FLOOR_M2 = 150;
 
 // Viewport-scoped read for the map: only spots inside the given bounds, so
 // payload size tracks what's on screen instead of the whole table. `limit`
@@ -105,7 +112,16 @@ export async function fetchVerifiedSpotsInBounds(
   bounds: BoundingBox,
   options: SpotsInBoundsOptions = {}
 ): Promise<Spot[]> {
-  const { limit = DEFAULT_BOUNDS_LIMIT, categories } = options;
+  const {
+    limit = DEFAULT_BOUNDS_LIMIT,
+    categories,
+    minParkAreaM2,
+    sizeClasses,
+    amenities,
+    wheelchairAccessibleOnly,
+    climbingGrades,
+  } = options;
+  const areaFloor = Math.max(minParkAreaM2 ?? JUNK_AREA_FLOOR_M2, JUNK_AREA_FLOOR_M2);
 
   // `categories: undefined` means "no filter"; `categories: []` means "filter
   // to nothing" and must return zero rows, not silently fall back to
@@ -124,10 +140,31 @@ export async function fetchVerifiedSpotsInBounds(
     .gte("lng", bounds.minLng)
     .lte("lng", bounds.maxLng)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(limit)
+    .or(
+      `category.not.in.(${JUNK_FILTERED_CATEGORIES.join(",")}),area_m2.gte.${areaFloor},area_m2.is.null`
+    );
 
   if (categories) {
     query = query.in("category", categories);
+  }
+
+  if (sizeClasses && sizeClasses.length > 0) {
+    query = query.in("size_class", sizeClasses);
+  }
+
+  // Overlap, not containment: "has at least one of the selected amenities,"
+  // not "has all of them" — the intuitive read for a checkbox filter.
+  if (amenities && amenities.length > 0) {
+    query = query.overlaps("amenities", amenities);
+  }
+
+  if (wheelchairAccessibleOnly) {
+    query = query.eq("accessibility", "yes");
+  }
+
+  if (climbingGrades && climbingGrades.length > 0) {
+    query = query.in("climbing_grade", climbingGrades);
   }
 
   const { data, error } = await query;
@@ -161,6 +198,53 @@ export async function fetchSpotDensity(
 
   if (error) throw new Error(error.message);
   return (data ?? []) as DensityBucket[];
+}
+
+// Populates the amenities checkbox filter with whatever actually occurs in
+// the data, rather than a hardcoded guess that could drift from real OSM
+// tags. Soft-fails to [] on any error (same convention as this module's
+// other reads) — a page render should never break because the filter
+// options couldn't be computed.
+export async function fetchDistinctAmenities(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("spots")
+    .select("amenities")
+    .eq("status", "verified")
+    .not("amenities", "is", null)
+    .limit(2000);
+
+  if (error) return [];
+
+  const values = new Set<string>();
+  for (const row of data ?? []) {
+    for (const amenity of (row.amenities as string[] | null) ?? []) {
+      values.add(amenity);
+    }
+  }
+  return Array.from(values).sort();
+}
+
+// Same soft-fail convention as fetchDistinctAmenities, but with an extra
+// gap to guard against: climbing_grade is a new column (schema.sql) that
+// may not exist live yet in a given deployment — same DDL-lag situation as
+// area_m2 before it. A missing column reads as "no grades available yet,"
+// not a crash.
+export async function fetchDistinctClimbingGrades(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("spots")
+    .select("climbing_grade")
+    .eq("status", "verified")
+    .eq("category", "climbing")
+    .not("climbing_grade", "is", null)
+    .limit(2000);
+
+  if (error) return [];
+
+  const values = new Set<string>();
+  for (const row of data ?? []) {
+    if (row.climbing_grade) values.add(row.climbing_grade as string);
+  }
+  return Array.from(values).sort();
 }
 
 export async function fetchPendingCount(

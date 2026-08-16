@@ -3,25 +3,45 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CompassIcon } from "lucide-react";
+import { CompassIcon, Footprints, Bike, Car, TrainFront } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CATEGORY_META } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
 
-const MILES_TO_METERS = 1609.34;
 const MY_LOCATION_LABEL = "My current location";
+
+type TransportMode = "walk" | "bike" | "drive" | "transit";
+
+// Straight-line radius, not a routed isochrone — this app has no routing API,
+// so travel time is approximated from a flat average speed per mode. Good
+// enough to size the map's initial viewport; not meant to promise "reachable
+// in N minutes" accuracy the way real turn-by-turn routing would.
+const MODE_SPEED_KMH: Record<TransportMode, number> = {
+  walk: 5,
+  bike: 15,
+  drive: 40,
+  transit: 20,
+};
+
+const MODE_META: Record<TransportMode, { label: string; icon: typeof Footprints }> = {
+  walk: { label: "Walk", icon: Footprints },
+  bike: { label: "Bike", icon: Bike },
+  drive: { label: "Drive", icon: Car },
+  transit: { label: "Transit", icon: TrainFront },
+};
+
+const DEFAULT_MODE: TransportMode = "walk";
+const DEFAULT_MINUTES = "15";
+
+function minutesToRadiusMeters(minutes: number, mode: TransportMode): number {
+  const metersPerMinute = (MODE_SPEED_KMH[mode] * 1000) / 60;
+  return Math.round(minutes * metersPerMinute);
+}
 
 async function geocodeAddress(
   address: string
@@ -40,9 +60,8 @@ async function geocodeAddress(
   return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
 }
 
-export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
+export function SessionQuestionnaire() {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -51,7 +70,8 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
     lat: number;
     lng: number;
   } | null>(null);
-  const [maxMiles, setMaxMiles] = useState("5");
+  const [mode, setMode] = useState<TransportMode>(DEFAULT_MODE);
+  const [maxMinutes, setMaxMinutes] = useState(DEFAULT_MINUTES);
   const [errors, setErrors] = useState<{ categories?: string; address?: string }>({});
 
   function toggleCategory(category: SpotCategory) {
@@ -112,9 +132,9 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
       params.set("lat", String(coords.lat));
       params.set("lng", String(coords.lng));
 
-      const miles = parseFloat(maxMiles);
-      if (Number.isFinite(miles) && miles > 0) {
-        params.set("radius", String(Math.round(miles * MILES_TO_METERS)));
+      const minutes = parseFloat(maxMinutes);
+      if (Number.isFinite(minutes) && minutes > 0) {
+        params.set("radius", String(minutesToRadiusMeters(minutes, mode)));
       }
     }
 
@@ -122,19 +142,12 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button size="lg" className={fullWidth ? "w-full" : undefined}>
-            Start session
-          </Button>
-        }
-      />
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Find spots near you</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <Card className="mx-auto w-full max-w-md">
+      <CardHeader>
+        <CardTitle className="text-xl">Find spots near you</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
             <Label>What are you into?</Label>
             <div className="flex flex-wrap gap-2">
@@ -209,26 +222,58 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
           </div>
 
           {address.trim() && (
-            <div className="space-y-2">
-              <Label htmlFor="max-miles">How far will you go? (miles)</Label>
-              <Input
-                id="max-miles"
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={maxMiles}
-                onChange={(e) => setMaxMiles(e.target.value)}
-              />
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Getting there by</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.entries(MODE_META) as [TransportMode, typeof MODE_META[TransportMode]][]).map(
+                    ([key, meta]) => {
+                      const active = mode === key;
+                      const Icon = meta.icon;
+                      return (
+                        <Badge
+                          key={key}
+                          variant="outline"
+                          render={
+                            <button
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => setMode(key)}
+                            />
+                          }
+                          className={cn(
+                            "h-9 cursor-pointer select-none gap-1.5 px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                            !active && "opacity-40"
+                          )}
+                        >
+                          <Icon aria-hidden="true" className="size-3.5" />
+                          {meta.label}
+                        </Badge>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="max-minutes">Max travel time (minutes)</Label>
+                <Input
+                  id="max-minutes"
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  value={maxMinutes}
+                  onChange={(e) => setMaxMinutes(e.target.value)}
+                />
+              </div>
             </div>
           )}
 
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Finding spots…" : "Find my spots"}
-            </Button>
-          </DialogFooter>
+          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+            {submitting ? "Finding spots…" : "Find my spots"}
+          </Button>
         </form>
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 }

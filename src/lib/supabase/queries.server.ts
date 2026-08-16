@@ -3,9 +3,10 @@ import {
   fetchVerifiedSpots,
   fetchVerifiedSpotsInBounds,
   fetchSpotDensity,
-  fetchFeaturedSpots,
   fetchPendingSpots,
   fetchPendingCount,
+  fetchDistinctAmenities,
+  fetchDistinctClimbingGrades,
   type SpotsInBoundsOptions,
 } from "@/lib/supabase/queries";
 import type { BoundingBox } from "@/lib/geo";
@@ -23,10 +24,6 @@ export async function getVerifiedSpotsInBounds(
 
 export async function getSpotDensity(bounds: BoundingBox, gridSize?: number) {
   return fetchSpotDensity(await createClient(), bounds, gridSize);
-}
-
-export async function getFeaturedSpots(limit: number) {
-  return fetchFeaturedSpots(await createClient(), limit);
 }
 
 export async function getPendingSpots() {

@@ -63,6 +63,14 @@ alter table spots add column if not exists amenities text[];
 -- present, else null. Never inferred from anything else.
 alter table spots add column if not exists accessibility text;
 
+-- climbing_grade: raw grade string straight from OSM (climbing:grade:french,
+-- climbing:grade:yds, or bare climbing:grade — whichever tag is present,
+-- preferred in that order). Deliberately not normalized to one scale: French
+-- sport grades and YDS aren't a clean 1:1 mapping, and inventing a
+-- conversion here would assert precision the source data doesn't have.
+-- Null means "no grade tagged in OSM," not "ungraded" or "easiest."
+alter table spots add column if not exists climbing_grade text;
+
 create index if not exists spots_category_idx on spots (category);
 
 -- spots_status_idx (status) is superseded by spots_status_lat_lng_idx below,
