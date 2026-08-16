@@ -5,29 +5,12 @@ import {
   getVerifiedSpotsInBounds,
   getVerifiedSpotsNationwide,
 } from "@/lib/supabase/queries.server";
-import { boundingBox, clampRadiusMeters, isValidLatLng } from "@/lib/geo";
-import type { SpotCategory } from "@/lib/types";
-import { CATEGORY_META } from "@/lib/categories";
+import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
 
 export const metadata: Metadata = {
   title: "Swipe Spots",
   description: "Swipe through nearby parks, gardens, and quiet spots — save the ones worth visiting.",
 };
-
-function parseCategories(raw: string | undefined): SpotCategory[] | null {
-  if (!raw) return null;
-  const known = new Set(Object.keys(CATEGORY_META));
-  const parsed = raw.split(",").filter((c) => known.has(c)) as SpotCategory[];
-  return parsed.length > 0 ? parsed : null;
-}
-
-function parseNumber(raw: string | undefined): number | null {
-  if (!raw) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
-const DEFAULT_VIEWPORT_RADIUS_METERS = 25_000;
 
 export default async function SwipePage({
   searchParams,
@@ -35,16 +18,8 @@ export default async function SwipePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-
-  const categories = parseCategories(params.cats);
-  const rawLat = parseNumber(params.lat);
-  const rawLng = parseNumber(params.lng);
-  const radiusMeters = parseNumber(params.radius);
-
-  // Out-of-range values (bad geocode, hand-edited URL) are treated as "no
-  // location" rather than feeding boundingBox a bogus lat/lng — that would
-  // produce a nonsensical or near-global box instead of just failing.
-  const hasLocation = rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
+  const parsed = parseSearchParams(params);
+  const hasLocation = parsed.lat !== null && parsed.lng !== null;
 
   // No location: the questionnaire's address field is optional and its copy
   // promises "browse spots across the whole country" on skip — a single
@@ -54,15 +29,18 @@ export default async function SwipePage({
   let spots;
   let userLocation: { lat: number; lng: number } | undefined;
   if (hasLocation) {
-    userLocation = { lat: rawLat as number, lng: rawLng as number };
-    const radius = clampRadiusMeters(radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS);
-    const initialBounds = boundingBox(userLocation.lat, userLocation.lng, radius);
+    userLocation = { lat: parsed.lat as number, lng: parsed.lng as number };
+    const { bounds: initialBounds } = boundsFromSearch(parsed);
     spots = await getVerifiedSpotsInBounds(initialBounds, {
-      categories: categories ?? undefined,
+      categories: parsed.categories ?? undefined,
+      activity: parsed.activity,
+      picnic: parsed.picnic,
     });
   } else {
     spots = await getVerifiedSpotsNationwide({
-      categories: categories ?? undefined,
+      categories: parsed.categories ?? undefined,
+      activity: parsed.activity,
+      picnic: parsed.picnic,
     });
   }
 

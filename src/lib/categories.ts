@@ -14,6 +14,16 @@ export const CATEGORY_META: Record<
   other: { label: "Other", color: "#7c3aed" },
 };
 
-export const CATEGORY_OPTIONS = Object.entries(CATEGORY_META).map(
-  ([value, meta]) => ({ value: value as SpotCategory, ...meta })
-);
+// Every picker in the app (quiz, /explore's dropdown, add-spot-dialog) should
+// offer the same set — `tree` (2 spots nationwide) is confirmed dead weight,
+// dropped everywhere it's user-selectable. `CATEGORY_META` still has a `tree`
+// entry so a lookup against a legacy tree-category row doesn't crash; it's
+// just never offered as a choice.
+export const SELECTABLE_CATEGORIES: SpotCategory[] = (
+  Object.keys(CATEGORY_META) as SpotCategory[]
+).filter((category) => category !== "tree");
+
+export const CATEGORY_OPTIONS = SELECTABLE_CATEGORIES.map((value) => ({
+  value,
+  ...CATEGORY_META[value],
+}));

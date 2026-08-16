@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,12 +17,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CATEGORY_META } from "@/lib/categories";
+import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
+import { VIBE_OPTIONS } from "@/lib/vibes";
 import { clampRadiusMeters } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
 
 const MY_LOCATION_LABEL = "My current location";
+const TOTAL_STEPS = 3;
 
 type TransportMode = "walk" | "bike" | "drive" | "transit";
 
@@ -58,6 +61,11 @@ async function geocodeAddress(
   url.searchParams.set("q", address);
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", "1");
+  // Bare zip codes are ambiguous across countries (e.g. "10001" is also a
+  // real postcode in Algeria) — without this, Nominatim's global ranking can
+  // put a same-numbered foreign postcode ahead of the US one. This app only
+  // has spot data in the US, so restricting the search is always correct here.
+  url.searchParams.set("countrycodes", "us");
 
   const res = await fetch(url.toString());
   if (!res.ok) return null;
@@ -70,12 +78,17 @@ async function geocodeAddress(
 
 // Dialog-wrapped questionnaire — same trigger/API shape as the old
 // StartSessionDialog (fullWidth prop, "Start session" trigger button, so
-// sticky-mobile-cta.tsx's usage carries over unchanged), but with a richer
-// form (transport mode + travel time, not just a flat miles radius).
+// sticky-mobile-cta.tsx's usage carries over unchanged), but with a richer,
+// multi-step form (category + vibe + transport mode/travel time, not just a
+// flat miles radius). Submits to /swipe — the swipe deck is this app's
+// centerpiece flow, so the quiz's job is to seed it, not to hand off to a
+// separate results list.
 export function SessionQuestionnaire({ fullWidth }: { fullWidth?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(0);
   const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
+  const [vibe, setVibe] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [address, setAddress] = useState("");
@@ -95,6 +108,27 @@ export function SessionQuestionnaire({ fullWidth }: { fullWidth?: boolean }) {
       return next;
     });
     setErrors((prev) => ({ ...prev, categories: undefined }));
+  }
+
+  function selectVibe(value: string) {
+    setVibe((prev) => (prev === value ? null : value));
+  }
+
+  function goNext() {
+    if (step === 0 && categories.size === 0) {
+      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
+      return;
+    }
+    setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
+  }
+
+  function goBack() {
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (nextOpen) setStep(0);
   }
 
   function useMyLocation() {
@@ -126,6 +160,12 @@ export function SessionQuestionnaire({ fullWidth }: { fullWidth?: boolean }) {
     const params = new URLSearchParams();
     params.set("cats", Array.from(categories).join(","));
 
+    const selectedVibe = VIBE_OPTIONS.find((option) => option.value === vibe);
+    if (selectedVibe) {
+      if (selectedVibe.kind === "activity") params.set("activity", selectedVibe.activity);
+      else params.set("picnic", "1");
+    }
+
     if (address.trim()) {
       setSubmitting(true);
       const coords =
@@ -155,144 +195,222 @@ export function SessionQuestionnaire({ fullWidth }: { fullWidth?: boolean }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <Button size="lg" className={fullWidth ? "w-full" : undefined}>
-            Start session
+            Take a quiz
           </Button>
         }
       />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Find spots near you</DialogTitle>
+          <DialogTitle>Find your spot</DialogTitle>
+          <DialogDescription>
+            A couple quick questions and we&apos;ll point you to real spots nearby.
+          </DialogDescription>
         </DialogHeader>
+
+        <div className="flex justify-center gap-1.5" aria-hidden="true">
+          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1.5 rounded-full transition-all duration-200 ease-out",
+                i === step ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30"
+              )}
+            />
+          ))}
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>What are you into?</Label>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(CATEGORY_META).map(([key, meta]) => {
-                const category = key as SpotCategory;
-                const active = categories.has(category);
-                return (
-                  <Badge
-                    key={key}
-                    variant="outline"
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => toggleCategory(category)}
-                      />
-                    }
-                    className={cn(
-                      "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
-                      !active && "opacity-40"
-                    )}
-                    style={{
-                      borderColor: meta.color,
-                      color: active ? meta.color : undefined,
-                      backgroundColor: active ? `${meta.color}1a` : undefined,
-                    }}
-                  >
-                    {meta.label}
-                  </Badge>
-                );
-              })}
-            </div>
-            {errors.categories && (
-              <p className="text-xs text-destructive">{errors.categories}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="address">Where are you?</Label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                id="address"
-                value={address}
-                onChange={(e) => {
-                  setAddress(e.target.value);
-                  if (e.target.value !== MY_LOCATION_LABEL) {
-                    setMyLocationCoords(null);
-                  }
-                  if (errors.address) setErrors((prev) => ({ ...prev, address: undefined }));
-                }}
-                placeholder="Address, city, or zip code"
-                aria-invalid={!!errors.address}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={useMyLocation}
-                disabled={locating}
-                className="shrink-0"
-              >
-                <CompassIcon aria-hidden="true" />
-                {locating ? "Locating…" : "Use my location"}
-              </Button>
-            </div>
-            {errors.address ? (
-              <p className="text-xs text-destructive">{errors.address}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Optional. Skip this to browse spots across the whole country.
-              </p>
-            )}
-          </div>
-
-          {address.trim() && (
-            <div className="space-y-3">
+          <div
+            key={step}
+            className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
+          >
+            {step === 0 && (
               <div className="space-y-2">
-                <Label>Getting there by</Label>
+                <Label>What are you into?</Label>
                 <div className="flex flex-wrap gap-2">
-                  {(Object.entries(MODE_META) as [TransportMode, typeof MODE_META[TransportMode]][]).map(
-                    ([key, meta]) => {
-                      const active = mode === key;
-                      const Icon = meta.icon;
-                      return (
-                        <Badge
-                          key={key}
-                          variant="outline"
-                          render={
-                            <button
-                              type="button"
-                              aria-pressed={active}
-                              onClick={() => setMode(key)}
-                            />
-                          }
-                          className={cn(
-                            "h-9 cursor-pointer select-none gap-1.5 px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
-                            !active && "opacity-40"
-                          )}
-                        >
-                          <Icon aria-hidden="true" className="size-3.5" />
-                          {meta.label}
-                        </Badge>
-                      );
-                    }
-                  )}
+                  {SELECTABLE_CATEGORIES.map((category) => {
+                    const meta = CATEGORY_META[category];
+                    const active = categories.has(category);
+                    return (
+                      <Badge
+                        key={category}
+                        variant="outline"
+                        render={
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => toggleCategory(category)}
+                          />
+                        }
+                        className={cn(
+                          "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                          !active && "opacity-40"
+                        )}
+                        style={{
+                          borderColor: meta.color,
+                          color: active ? meta.color : undefined,
+                          backgroundColor: active ? `${meta.color}1a` : undefined,
+                        }}
+                      >
+                        {meta.label}
+                      </Badge>
+                    );
+                  })}
+                </div>
+                {errors.categories && (
+                  <p className="text-xs text-destructive">{errors.categories}</p>
+                )}
+              </div>
+            )}
+
+            {step === 1 && (
+              <div className="space-y-2">
+                <Label>What&apos;s the vibe? (optional)</Label>
+                <div className="flex flex-wrap gap-2">
+                  {VIBE_OPTIONS.map((option) => {
+                    const active = vibe === option.value;
+                    return (
+                      <Badge
+                        key={option.value}
+                        variant="outline"
+                        render={
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => selectVibe(option.value)}
+                          />
+                        }
+                        className={cn(
+                          "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                          active
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "opacity-40"
+                        )}
+                      >
+                        {option.label}
+                      </Badge>
+                    );
+                  })}
                 </div>
               </div>
+            )}
 
-              <div className="space-y-2">
-                <Label htmlFor="max-minutes">Max travel time (minutes)</Label>
-                <Input
-                  id="max-minutes"
-                  type="number"
-                  min="1"
-                  inputMode="numeric"
-                  value={maxMinutes}
-                  onChange={(e) => setMaxMinutes(e.target.value)}
-                />
+            {step === 2 && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="address">Where are you?</Label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      id="address"
+                      value={address}
+                      onChange={(e) => {
+                        setAddress(e.target.value);
+                        if (e.target.value !== MY_LOCATION_LABEL) {
+                          setMyLocationCoords(null);
+                        }
+                        if (errors.address) setErrors((prev) => ({ ...prev, address: undefined }));
+                      }}
+                      placeholder="Address, city, or zip code"
+                      aria-invalid={!!errors.address}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={useMyLocation}
+                      disabled={locating}
+                      className="shrink-0"
+                    >
+                      <CompassIcon aria-hidden="true" />
+                      {locating ? "Locating…" : "Use my location"}
+                    </Button>
+                  </div>
+                  {errors.address ? (
+                    <p className="text-xs text-destructive">{errors.address}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Optional. Skip this to browse spots across the whole country.
+                    </p>
+                  )}
+                </div>
+
+                {address.trim() && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Getting there by</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {(
+                          Object.entries(MODE_META) as [
+                            TransportMode,
+                            (typeof MODE_META)[TransportMode],
+                          ][]
+                        ).map(([key, meta]) => {
+                          const active = mode === key;
+                          const Icon = meta.icon;
+                          return (
+                            <Badge
+                              key={key}
+                              variant="outline"
+                              render={
+                                <button
+                                  type="button"
+                                  aria-pressed={active}
+                                  onClick={() => setMode(key)}
+                                />
+                              }
+                              className={cn(
+                                "h-9 cursor-pointer select-none gap-1.5 px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                                !active && "opacity-40"
+                              )}
+                            >
+                              <Icon aria-hidden="true" className="size-3.5" />
+                              {meta.label}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="max-minutes">Max travel time (minutes)</Label>
+                      <Input
+                        id="max-minutes"
+                        type="number"
+                        min="1"
+                        inputMode="numeric"
+                        value={maxMinutes}
+                        onChange={(e) => setMaxMinutes(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Finding spots…" : "Find my spots"}
-            </Button>
+            {step > 0 && (
+              <Button type="button" variant="outline" onClick={goBack}>
+                Back
+              </Button>
+            )}
+            {/* Distinct `key`s force React to swap DOM nodes here instead of
+                mutating one button's `type` in place — without them, clicking
+                "Next" on the second-to-last step flips the very node just
+                clicked to type="submit" mid-event, and the browser submits
+                the form as part of that same click. */}
+            {step < TOTAL_STEPS - 1 ? (
+              <Button key="next" type="button" onClick={goNext}>
+                Next
+              </Button>
+            ) : (
+              <Button key="submit" type="submit" disabled={submitting}>
+                {submitting ? "Finding spots…" : "Find my spots"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

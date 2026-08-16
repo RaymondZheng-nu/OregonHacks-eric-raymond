@@ -109,6 +109,15 @@ export type SpotsInBoundsOptions = {
   // a single orderable scale (French vs YDS), so this is an exact-match set,
   // not a numeric range.
   climbingGrades?: string[];
+  // Set only when the "what do you want to do" quiz question was answered —
+  // filters against the `activity_fit` array column (see dedup-cleanup.mjs)
+  // rather than being a hard requirement for plain map browsing.
+  activity?: string;
+  // `lounge` (small spots, per SIZE_ACTIVITY_DEFAULTS in dedup-cleanup.mjs)
+  // covers reading/relaxing but not picnicking — a bench-sized spot can't fit
+  // a picnic. Picnic-worthiness isn't its own activity_fit tag; `size_class`
+  // medium/large is the real, already-computed signal for "has an open area."
+  picnic?: boolean;
 };
 
 const DEFAULT_BOUNDS_LIMIT = 1000;
@@ -141,6 +150,8 @@ export async function fetchVerifiedSpotsInBounds(
     amenities,
     wheelchairAccessibleOnly,
     climbingGrades,
+    activity,
+    picnic,
   } = options;
   const areaFloor = Math.max(minParkAreaM2 ?? JUNK_AREA_FLOOR_M2, JUNK_AREA_FLOOR_M2);
 
@@ -188,6 +199,18 @@ export async function fetchVerifiedSpotsInBounds(
     query = query.in("climbing_grade", climbingGrades);
   }
 
+  if (activity) {
+    query = query.overlaps("activity_fit", [activity]);
+  }
+
+  // picnic and an explicit sizeClasses filter both constrain size_class —
+  // intersect them (.in twice) rather than letting the second call silently
+  // clobber the first, so "medium/large" from picnic still narrows further
+  // if the user also picked a specific size in Advanced settings.
+  if (picnic) {
+    query = query.in("size_class", ["medium", "large"]);
+  }
+
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as Spot[];
@@ -219,6 +242,8 @@ export async function fetchVerifiedSpotsNationwide(
     amenities,
     wheelchairAccessibleOnly,
     climbingGrades,
+    activity,
+    picnic,
   } = options;
   const areaFloor = Math.max(minParkAreaM2 ?? JUNK_AREA_FLOOR_M2, JUNK_AREA_FLOOR_M2);
 
@@ -253,6 +278,14 @@ export async function fetchVerifiedSpotsNationwide(
 
   if (climbingGrades && climbingGrades.length > 0) {
     query = query.in("climbing_grade", climbingGrades);
+  }
+
+  if (activity) {
+    query = query.overlaps("activity_fit", [activity]);
+  }
+
+  if (picnic) {
+    query = query.in("size_class", ["medium", "large"]);
   }
 
   const { data, error } = await query;

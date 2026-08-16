@@ -147,14 +147,20 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
 export function SpotMap({
   initialSpots,
   categories,
+  activity,
+  picnic,
   initialCenter,
+  focusSpotId,
   onViewChange,
   minParkAreaM2,
   advancedFilters,
 }: {
   initialSpots: Spot[];
   categories: Set<SpotCategory>;
+  activity?: string;
+  picnic?: boolean;
   initialCenter?: [number, number];
+  focusSpotId?: string;
   onViewChange?: (info: { count: number; mode: MapMode }) => void;
   minParkAreaM2?: number;
   advancedFilters?: AdvancedFilters;
@@ -162,6 +168,12 @@ export function SpotMap({
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [spots, setSpots] = useState<Spot[]>(initialSpots);
   const [densityPoints, setDensityPoints] = useState<L.HeatLatLngTuple[]>([]);
+  // Registry of live marker instances, keyed by spot id — lets the focus
+  // effect below imperatively open one specific marker's popup once it's
+  // actually rendered, without react-leaflet exposing that as a declarative
+  // prop on <Marker>.
+  const markerRefs = useRef<Map<string, L.Marker>>(new Map());
+  const hasOpenedFocusPopupRef = useRef(false);
 
   // `initialSpots` (the SSR-fetched default viewport) is only authoritative
   // until the client's first real viewport-driven fetch resolves — after
@@ -191,6 +203,18 @@ export function SpotMap({
   const noCategoriesSelected = categoryList.length === 0;
   const visibleSpots = noCategoriesSelected ? [] : spots;
 
+  // Opens the focused marker's popup exactly once, as soon as it actually
+  // exists in the currently-rendered set — the results list only passes the
+  // spot's own coordinates, not a guarantee it's already in `spots`.
+  useEffect(() => {
+    if (!focusSpotId || hasOpenedFocusPopupRef.current || noCategoriesSelected) return;
+    const marker = markerRefs.current.get(focusSpotId);
+    if (marker) {
+      marker.openPopup();
+      hasOpenedFocusPopupRef.current = true;
+    }
+  }, [focusSpotId, spots, noCategoriesSelected]);
+
   // Individual-marker mode: refetches on pan/zoom/category change.
   useEffect(() => {
     if (!viewport || mode !== "markers") return;
@@ -207,6 +231,8 @@ export function SpotMap({
       categories: categoryList,
       minParkAreaM2,
       ...advancedFilters,
+      activity,
+      picnic,
     })
       .then((result) => {
         if (cancelled) return;
@@ -222,7 +248,7 @@ export function SpotMap({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded: it's a per-render prop from the parent, not something a refetch should be keyed on.
-  }, [viewport, mode, categoryList, minParkAreaM2, advancedFilters]);
+  }, [viewport, mode, categoryList, minParkAreaM2, advancedFilters, activity, picnic]);
 
   // Heatmap mode: the density RPC has no category param (deliberately — see
   // schema.sql), so this only depends on viewport, not categoryList. Toggling
@@ -252,7 +278,7 @@ export function SpotMap({
   return (
     <MapContainer
       center={initialCenter ?? NYC_CENTER}
-      zoom={initialCenter ? 13 : DEFAULT_ZOOM}
+      zoom={focusSpotId ? 16 : initialCenter ? 13 : DEFAULT_ZOOM}
       scrollWheelZoom
       className="h-full w-full"
     >
@@ -271,13 +297,20 @@ export function SpotMap({
         // was the main cause of map lag. Clustering collapses nearby pins
         // into a single count bubble until the user zooms in enough to
         // separate them, so the DOM node count stays bounded regardless of
-        // how dense a viewport gets.
+        // how dense a viewport gets. The ref callback still registers each
+        // Marker instance for the focusSpotId popup-opening effect above —
+        // at focusSpotId's forced zoom (16), the pin it targets has already
+        // separated out of any cluster.
         <MarkerClusterGroup chunkedLoading>
           {visibleSpots.map((spot) => (
             <Marker
               key={spot.id}
               position={[spot.lat, spot.lng]}
               icon={markerIcon(CATEGORY_META[spot.category].color)}
+              ref={(instance) => {
+                if (instance) markerRefs.current.set(spot.id, instance);
+                else markerRefs.current.delete(spot.id);
+              }}
             >
               <Popup>
                 <div className="w-52 space-y-1.5">

@@ -314,9 +314,7 @@ export function SpotSwipeDeck({
     deckRef.current = filtered;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDeck(filtered);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTotalCount(filtered.length);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSavedCount(saved.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount to apply client-only storage filtering; re-running on `spots` identity would fight user-driven deck state after the first swipe.
   }, []);
