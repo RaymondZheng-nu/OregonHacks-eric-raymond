@@ -24,6 +24,7 @@ import type { SpotCategory } from "@/lib/types";
 
 const MILES_TO_METERS = 1609.34;
 const MY_LOCATION_LABEL = "My current location";
+const TOTAL_STEPS = 3;
 
 async function geocodeAddress(
   address: string
@@ -45,6 +46,7 @@ async function geocodeAddress(
 export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(0);
   const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
   const [activity, setActivity] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
@@ -75,6 +77,23 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
       setCategories((prev) => new Set(prev).add(option.impliesCategory as SpotCategory));
       setErrors((prev) => ({ ...prev, categories: undefined }));
     }
+  }
+
+  function goNext() {
+    if (step === 0 && categories.size === 0) {
+      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
+      return;
+    }
+    setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
+  }
+
+  function goBack() {
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (nextOpen) setStep(0);
   }
 
   function useMyLocation() {
@@ -136,7 +155,7 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <Button size="lg" className={fullWidth ? "w-full" : undefined}>
@@ -151,128 +170,170 @@ export function StartSessionDialog({ fullWidth }: { fullWidth?: boolean }) {
             A couple quick questions and we&apos;ll point you to real spots nearby.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex justify-center gap-1.5" aria-hidden="true">
+          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1.5 rounded-full transition-all duration-200 ease-out",
+                i === step ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30"
+              )}
+            />
+          ))}
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>What are you into?</Label>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(CATEGORY_META).map(([key, meta]) => {
-                const category = key as SpotCategory;
-                const active = categories.has(category);
-                return (
-                  <Badge
-                    key={key}
-                    variant="outline"
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => toggleCategory(category)}
-                      />
-                    }
-                    className={cn(
-                      "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
-                      !active && "opacity-40"
-                    )}
-                    style={{
-                      borderColor: meta.color,
-                      color: active ? meta.color : undefined,
-                      backgroundColor: active ? `${meta.color}1a` : undefined,
-                    }}
-                  >
-                    {meta.label}
-                  </Badge>
-                );
-              })}
-            </div>
-            {errors.categories && (
-              <p className="text-xs text-destructive">{errors.categories}</p>
+          <div
+            key={step}
+            className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
+          >
+            {step === 0 && (
+              <div className="space-y-2">
+                <Label>What are you into?</Label>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(CATEGORY_META).map(([key, meta]) => {
+                    const category = key as SpotCategory;
+                    const active = categories.has(category);
+                    return (
+                      <Badge
+                        key={key}
+                        variant="outline"
+                        render={
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => toggleCategory(category)}
+                          />
+                        }
+                        className={cn(
+                          "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                          !active && "opacity-40"
+                        )}
+                        style={{
+                          borderColor: meta.color,
+                          color: active ? meta.color : undefined,
+                          backgroundColor: active ? `${meta.color}1a` : undefined,
+                        }}
+                      >
+                        {meta.label}
+                      </Badge>
+                    );
+                  })}
+                </div>
+                {errors.categories && (
+                  <p className="text-xs text-destructive">{errors.categories}</p>
+                )}
+              </div>
+            )}
+
+            {step === 1 && (
+              <div className="space-y-2">
+                <Label>What do you want to do there? (optional)</Label>
+                <div className="flex flex-wrap gap-2">
+                  {ACTIVITY_OPTIONS.map((option) => {
+                    const active = activity === option.value;
+                    return (
+                      <Badge
+                        key={option.value}
+                        variant="outline"
+                        render={
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => selectActivity(option)}
+                          />
+                        }
+                        className={cn(
+                          "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                          active
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "opacity-40"
+                        )}
+                      >
+                        {option.label}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="address">Where are you?</Label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      id="address"
+                      value={address}
+                      onChange={(e) => {
+                        setAddress(e.target.value);
+                        if (e.target.value !== MY_LOCATION_LABEL) {
+                          setMyLocationCoords(null);
+                        }
+                        if (errors.address) setErrors((prev) => ({ ...prev, address: undefined }));
+                      }}
+                      placeholder="Address, city, or zip code"
+                      aria-invalid={!!errors.address}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={useMyLocation}
+                      disabled={locating}
+                      className="shrink-0"
+                    >
+                      <CompassIcon aria-hidden="true" />
+                      {locating ? "Locating…" : "Use my location"}
+                    </Button>
+                  </div>
+                  {errors.address ? (
+                    <p className="text-xs text-destructive">{errors.address}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Optional. Skip this to browse spots across the whole country.
+                    </p>
+                  )}
+                </div>
+
+                {address.trim() && (
+                  <div className="space-y-2">
+                    <Label htmlFor="max-miles">How far will you go? (miles)</Label>
+                    <Input
+                      id="max-miles"
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={maxMiles}
+                      onChange={(e) => setMaxMiles(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
             )}
           </div>
-
-          <div className="space-y-2">
-            <Label>What do you want to do there? (optional)</Label>
-            <div className="flex flex-wrap gap-2">
-              {ACTIVITY_OPTIONS.map((option) => {
-                const active = activity === option.value;
-                return (
-                  <Badge
-                    key={option.value}
-                    variant="outline"
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => selectActivity(option)}
-                      />
-                    }
-                    className={cn(
-                      "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
-                      active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "opacity-40"
-                    )}
-                  >
-                    {option.label}
-                  </Badge>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="address">Where are you?</Label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                id="address"
-                value={address}
-                onChange={(e) => {
-                  setAddress(e.target.value);
-                  if (e.target.value !== MY_LOCATION_LABEL) {
-                    setMyLocationCoords(null);
-                  }
-                  if (errors.address) setErrors((prev) => ({ ...prev, address: undefined }));
-                }}
-                placeholder="Address, city, or zip code"
-                aria-invalid={!!errors.address}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={useMyLocation}
-                disabled={locating}
-                className="shrink-0"
-              >
-                <CompassIcon aria-hidden="true" />
-                {locating ? "Locating…" : "Use my location"}
-              </Button>
-            </div>
-            {errors.address ? (
-              <p className="text-xs text-destructive">{errors.address}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Optional. Skip this to browse spots across the whole country.
-              </p>
-            )}
-          </div>
-
-          {address.trim() && (
-            <div className="space-y-2">
-              <Label htmlFor="max-miles">How far will you go? (miles)</Label>
-              <Input
-                id="max-miles"
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={maxMiles}
-                onChange={(e) => setMaxMiles(e.target.value)}
-              />
-            </div>
-          )}
 
           <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Finding spots…" : "Find my spots"}
-            </Button>
+            {step > 0 && (
+              <Button type="button" variant="outline" onClick={goBack}>
+                Back
+              </Button>
+            )}
+            {/* Distinct `key`s force React to swap DOM nodes here instead of
+                mutating one button's `type` in place — without them, clicking
+                "Next" on the second-to-last step flips the very node just
+                clicked to type="submit" mid-event, and the browser submits
+                the form as part of that same click. */}
+            {step < TOTAL_STEPS - 1 ? (
+              <Button key="next" type="button" onClick={goNext}>
+                Next
+              </Button>
+            ) : (
+              <Button key="submit" type="submit" disabled={submitting}>
+                {submitting ? "Finding spots…" : "Find my spots"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
