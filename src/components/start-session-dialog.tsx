@@ -33,6 +33,11 @@ async function geocodeAddress(
   url.searchParams.set("q", address);
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", "1");
+  // Bare zip codes are ambiguous across countries (e.g. "10001" is also a
+  // real postcode in Algeria) — without this, Nominatim's global ranking can
+  // put a same-numbered foreign postcode ahead of the US one. This app only
+  // has spot data in the US, so restricting the search is always correct here.
+  url.searchParams.set("countrycodes", "us");
 
   const res = await fetch(url.toString());
   if (!res.ok) return null;
