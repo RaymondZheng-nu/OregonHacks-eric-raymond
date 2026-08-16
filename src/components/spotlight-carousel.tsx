@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
+import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
 import { CATEGORY_META } from "@/lib/categories";
 import { getSpotVerdict } from "@/lib/spot-verdict";
 import { cn } from "@/lib/utils";
@@ -86,15 +87,14 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
                   className="object-cover"
                 />
               ) : (
-                <div
-                  className="h-full w-full"
-                  style={{
-                    backgroundColor: `${CATEGORY_META[spot.category].color}26`,
-                  }}
-                  aria-hidden="true"
+                <SpotLocationPreview
+                  lat={spot.lat}
+                  lng={spot.lng}
+                  category={spot.category}
+                  draggable={false}
                 />
               )}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+              <div className="absolute inset-x-0 bottom-0 z-[1001] bg-gradient-to-t from-black/70 to-transparent p-4">
                 <p className="text-sm font-medium text-white">{spot.name}</p>
                 <p
                   className={cn(
@@ -111,7 +111,7 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
       </div>
 
       {spots.length > 1 && (
-        <div className="absolute inset-x-0 top-3 flex justify-center gap-1.5">
+        <div className="absolute inset-x-0 top-3 z-[1001] flex justify-center gap-1.5">
           {spots.map((spot, i) => (
             <button
               key={spot.id}

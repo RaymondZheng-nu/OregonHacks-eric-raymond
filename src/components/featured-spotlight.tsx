@@ -4,6 +4,7 @@ import Image from "next/image";
 import { CheckIcon, FlagIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Card, CardContent } from "@/components/ui/card";
+import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
 import { CATEGORY_META } from "@/lib/categories";
 import { getSpotVerdict } from "@/lib/spot-verdict";
 import { cn } from "@/lib/utils";
@@ -44,22 +45,22 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
                     className="object-cover"
                   />
                 ) : (
-                  <div
-                    className="h-full w-full"
-                    style={{
-                      backgroundColor: `${CATEGORY_META[spot.category].color}26`,
-                    }}
-                    aria-hidden="true"
+                  <SpotLocationPreview
+                    lat={spot.lat}
+                    lng={spot.lng}
+                    category={spot.category}
                   />
                 )}
                 {/* Only the two signal-bearing tones get a badge — the common
                     zero-votes case stays visually clean, no room here for the
                     full verdict sentence used elsewhere (map popup, results,
-                    carousel), so this is a compact icon+count instead. */}
+                    carousel), so this is a compact icon+count instead.
+                    z-[1001] keeps it above the location-preview map's own
+                    panes/controls when there's no photo. */}
                 {verdict.tone !== "neutral" && (
                   <div
                     className={cn(
-                      "absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white",
+                      "absolute top-1.5 right-1.5 z-[1001] flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white",
                       verdict.tone === "caution" && "bg-destructive/80",
                     )}
                   >

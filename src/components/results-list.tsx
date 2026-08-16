@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CATEGORY_META } from "@/lib/categories";
+import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
 import { getSpotVerdict } from "@/lib/spot-verdict";
 import { getMatchChips, type MatchFilters } from "@/lib/spot-reasoning";
 import { cn } from "@/lib/utils";
@@ -192,12 +192,10 @@ export function ResultsList({
               className="object-cover"
             />
           ) : (
-            <div
-              className="h-full w-full"
-              style={{
-                backgroundColor: `${CATEGORY_META[spot.category].color}26`,
-              }}
-              aria-hidden="true"
+            <SpotLocationPreview
+              lat={spot.lat}
+              lng={spot.lng}
+              category={spot.category}
             />
           )}
 
@@ -207,7 +205,7 @@ export function ResultsList({
                 type="button"
                 aria-label="Previous spot"
                 onClick={goPrev}
-                className="absolute top-1/2 left-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
+                className="absolute top-1/2 left-2 z-[1001] flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
               >
                 <ChevronLeftIcon aria-hidden="true" className="size-5" />
               </button>
@@ -215,7 +213,7 @@ export function ResultsList({
                 type="button"
                 aria-label="Next spot"
                 onClick={goNext}
-                className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
+                className="absolute top-1/2 right-2 z-[1001] flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
               >
                 <ChevronRightIcon aria-hidden="true" className="size-5" />
               </button>
