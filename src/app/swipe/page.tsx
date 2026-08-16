@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { BlobBackground } from "@/components/blob-background";
 import { SpotSwipeDeck } from "@/components/spot-swipe-deck";
-import { getVerifiedSpotsInBounds } from "@/lib/supabase/queries.server";
+import {
+  getVerifiedSpotsInBounds,
+  getVerifiedSpotsNationwide,
+} from "@/lib/supabase/queries.server";
 import { boundingBox, clampRadiusMeters, isValidLatLng } from "@/lib/geo";
 import type { SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
@@ -24,9 +27,6 @@ function parseNumber(raw: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Same defaults as explore/page.tsx, so a bare /swipe (no questionnaire
-// params) behaves the same way a bare /explore does.
-const DEFAULT_CENTER = { lat: 40.7484, lng: -73.9857 };
 const DEFAULT_VIEWPORT_RADIUS_METERS = 25_000;
 
 export default async function SwipePage({
@@ -41,26 +41,35 @@ export default async function SwipePage({
   const rawLng = parseNumber(params.lng);
   const radiusMeters = parseNumber(params.radius);
 
-  // Out-of-range values (bad geocode, hand-edited URL) fall back to the
-  // default center rather than feeding boundingBox a bogus lat/lng — that
-  // would produce a nonsensical or near-global box instead of just failing.
+  // Out-of-range values (bad geocode, hand-edited URL) are treated as "no
+  // location" rather than feeding boundingBox a bogus lat/lng — that would
+  // produce a nonsensical or near-global box instead of just failing.
   const hasLocation = rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
-  const lat = hasLocation ? (rawLat as number) : DEFAULT_CENTER.lat;
-  const lng = hasLocation ? (rawLng as number) : DEFAULT_CENTER.lng;
-  const radius = clampRadiusMeters(radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS);
-  const initialBounds = boundingBox(lat, lng, radius);
 
-  const spots = await getVerifiedSpotsInBounds(initialBounds, {
-    categories: categories ?? undefined,
-  });
+  // No location: the questionnaire's address field is optional and its copy
+  // promises "browse spots across the whole country" on skip — a single
+  // city's bounded radius would silently break that promise, so this pulls
+  // a shuffled nationwide sample (fetchVerifiedSpotsNationwide) instead of
+  // defaulting to a fixed city.
+  let spots;
+  let userLocation: { lat: number; lng: number } | undefined;
+  if (hasLocation) {
+    userLocation = { lat: rawLat as number, lng: rawLng as number };
+    const radius = clampRadiusMeters(radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS);
+    const initialBounds = boundingBox(userLocation.lat, userLocation.lng, radius);
+    spots = await getVerifiedSpotsInBounds(initialBounds, {
+      categories: categories ?? undefined,
+    });
+  } else {
+    spots = await getVerifiedSpotsNationwide({
+      categories: categories ?? undefined,
+    });
+  }
 
   return (
     <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden">
       <BlobBackground />
-      <SpotSwipeDeck
-        spots={spots}
-        userLocation={hasLocation ? { lat, lng } : undefined}
-      />
+      <SpotSwipeDeck spots={spots} userLocation={userLocation} />
     </div>
   );
 }

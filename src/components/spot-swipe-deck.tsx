@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   motion,
@@ -272,24 +272,18 @@ export function SpotSwipeDeck({
   spots: Spot[];
   userLocation?: { lat: number; lng: number };
 }) {
-  // Skipped-this-session spots are excluded on mount, not re-checked live —
-  // a spot skipped in an earlier /swipe visit this session shouldn't
-  // reappear if the user navigates back to the deck. Already-saved spots
-  // (localStorage, persists across sessions) are excluded too: without this,
-  // a spot saved days ago can resurface in a fresh deck, a right-swipe on it
-  // is a silent no-op (saveSpot dedupes by id), and a later undo would still
-  // unconditionally remove it from the saved list — deleting a real,
-  // previously-saved spot the user never asked to remove.
-  const initialDeck = useMemo(() => {
-    const skipped = getSkippedSpotIds();
-    const saved = new Set(getSavedSpots().map((s) => s.id));
-    return spots.filter((spot) => !skipped.has(spot.id) && !saved.has(spot.id));
-  }, [spots]);
-
-  const [deck, setDeck] = useState<Spot[]>(initialDeck);
+  // Deck starts as the raw server-provided `spots` — matching the server
+  // render exactly (SSR has no localStorage/sessionStorage access, so it
+  // can't know what's already skipped/saved). Filtering by skipped/saved ids
+  // happens in the mount effect below, client-only, after hydration —
+  // filtering here via useMemo would run during the client's first render
+  // pass too, produce a shorter array than the server-rendered HTML, and
+  // trigger a React hydration mismatch the moment any prior-session
+  // skip/save history overlaps the new deck.
+  const [deck, setDeck] = useState<Spot[]>(spots);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [savedCount, setSavedCount] = useState(0);
-  const totalCount = initialDeck.length;
+  const [totalCount, setTotalCount] = useState(spots.length);
 
   // Mirrors of `deck`/`history` that are always synchronously current —
   // unlike the state values, which only reflect the latest call once React
@@ -300,14 +294,31 @@ export function SpotSwipeDeck({
   // duplicate a card back into the deck on undo. Reading/writing the ref
   // synchronously inside each handler makes repeated same-tick calls each
   // see the effect of the one before it.
-  const deckRef = useRef(initialDeck);
+  const deckRef = useRef(spots);
   const historyRef = useRef<HistoryEntry[]>([]);
 
   useEffect(() => {
-    // One-time hydration from localStorage after mount — same convention as
-    // saved/page.tsx's read, not an ongoing subscription to set up.
+    // One-time hydration from localStorage/sessionStorage after mount — same
+    // convention as saved/page.tsx's read, not an ongoing subscription to
+    // set up. Excludes spots skipped earlier this session (sessionStorage)
+    // and spots already saved in a past session (localStorage): without
+    // this, a spot saved days ago can resurface in a fresh deck, a
+    // right-swipe on it is a silent no-op (saveSpot dedupes by id), and a
+    // later undo would still unconditionally remove it from the saved list
+    // — deleting a real, previously-saved spot the user never asked to remove.
+    const skipped = getSkippedSpotIds();
+    const saved = getSavedSpots();
+    const savedIds = new Set(saved.map((s) => s.id));
+    const filtered = spots.filter((spot) => !skipped.has(spot.id) && !savedIds.has(spot.id));
+
+    deckRef.current = filtered;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSavedCount(getSavedSpots().length);
+    setDeck(filtered);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTotalCount(filtered.length);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSavedCount(saved.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount to apply client-only storage filtering; re-running on `spots` identity would fight user-driven deck state after the first swipe.
   }, []);
 
   function resolveTop(direction: SwipeDirection) {

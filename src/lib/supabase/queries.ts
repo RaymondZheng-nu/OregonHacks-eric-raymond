@@ -193,6 +193,82 @@ export async function fetchVerifiedSpotsInBounds(
   return (data ?? []) as Spot[];
 }
 
+const DEFAULT_NATIONWIDE_SAMPLE_SIZE = 150;
+
+// Raw pool pulled before shuffling: without an ORDER BY, Postgres tends to
+// return rows close to insertion order, which is city-clustered from the
+// 30-city ingestion batches (scripts/ingest-osm-cities.mjs). Pulling a wide
+// pool before shuffling guarantees the returned sample actually spans many
+// cities instead of just whichever city happens to sort first.
+const NATIONWIDE_RAW_POOL_SIZE = 5000;
+
+// No-bounds counterpart to fetchVerifiedSpotsInBounds, for when there's no
+// location context to scope a viewport to (e.g. the questionnaire's address
+// field was skipped — see session-questionnaire.tsx's "browse spots across
+// the whole country" copy, which this makes literally true instead of
+// silently falling back to a single city's radius).
+export async function fetchVerifiedSpotsNationwide(
+  supabase: SupabaseClient,
+  options: SpotsInBoundsOptions = {}
+): Promise<Spot[]> {
+  const {
+    limit = DEFAULT_NATIONWIDE_SAMPLE_SIZE,
+    categories,
+    minParkAreaM2,
+    sizeClasses,
+    amenities,
+    wheelchairAccessibleOnly,
+    climbingGrades,
+  } = options;
+  const areaFloor = Math.max(minParkAreaM2 ?? JUNK_AREA_FLOOR_M2, JUNK_AREA_FLOOR_M2);
+
+  if (categories && categories.length === 0) {
+    return [];
+  }
+
+  let query = supabase
+    .from("spots")
+    .select("*")
+    .eq("status", "verified")
+    .limit(NATIONWIDE_RAW_POOL_SIZE)
+    .or(
+      `category.not.in.(${JUNK_FILTERED_CATEGORIES.join(",")}),area_m2.gte.${areaFloor},area_m2.is.null`
+    );
+
+  if (categories) {
+    query = query.in("category", categories);
+  }
+
+  if (sizeClasses && sizeClasses.length > 0) {
+    query = query.in("size_class", sizeClasses);
+  }
+
+  if (amenities && amenities.length > 0) {
+    query = query.overlaps("amenities", amenities);
+  }
+
+  if (wheelchairAccessibleOnly) {
+    query = query.eq("accessibility", "yes");
+  }
+
+  if (climbingGrades && climbingGrades.length > 0) {
+    query = query.in("climbing_grade", climbingGrades);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  // Fisher-Yates, not .sort(() => Math.random() - 0.5) — the sort-comparator
+  // trick is a biased shuffle (V8's sort isn't a fair coin flip per pair).
+  const pool = (data ?? []) as Spot[];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  return pool.slice(0, limit);
+}
+
 export type DensityBucket = {
   lat: number;
   lng: number;
