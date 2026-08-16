@@ -95,18 +95,14 @@ async function main() {
     `Containment: ${verifiedGroups.length} verified group(s) to apply, ${skippedGroups} density-only group(s) skipped.`
   );
 
+  // Children merged first, `features` written last from only the children
+  // that actually succeeded — writing `features` up front (old order) would
+  // list a child on the parent even if its own merge update then failed,
+  // leaving that child still status='verified' (a visible duplicate) while
+  // the parent's feature list falsely claimed it was absorbed.
   let mergedChildren = 0;
   for (const group of verifiedGroups) {
-    const featureNames = group.children.map((c) => c.name);
-    const { error: featuresError } = await supabase
-      .from("spots")
-      .update({ features: featureNames })
-      .eq("id", group.parent.id);
-    if (featuresError) {
-      console.error(`  failed to set features on parent "${group.parent.name}": ${featuresError.message}`);
-      continue;
-    }
-
+    const mergedNames = [];
     for (const child of group.children) {
       const { error } = await supabase
         .from("spots")
@@ -117,7 +113,17 @@ async function main() {
         continue;
       }
       mergedChildren++;
+      mergedNames.push(child.name);
       console.log(`  merged "${child.name}" into "${group.parent.name}"`);
+    }
+
+    if (mergedNames.length === 0) continue;
+    const { error: featuresError } = await supabase
+      .from("spots")
+      .update({ features: mergedNames })
+      .eq("id", group.parent.id);
+    if (featuresError) {
+      console.error(`  failed to set features on parent "${group.parent.name}": ${featuresError.message}`);
     }
   }
 
@@ -125,8 +131,15 @@ async function main() {
   const tagLines = sqlText
     .split("\n")
     .filter((line) => line.startsWith("update spots set size_class"));
-  const tagRows = tagLines.map(parseTagLine).filter((r) => r !== null);
+  const tagRows = [];
+  const unparsedLines = [];
+  for (const line of tagLines) {
+    const row = parseTagLine(line);
+    if (row) tagRows.push(row);
+    else unparsedLines.push(line);
+  }
   console.log(`Tags: ${tagRows.length}/${tagLines.length} parsed, applying...`);
+  for (const line of unparsedLines) console.error(`  unparsed tag line: ${line}`);
 
   const tagErrors = await runPool(tagRows, async (row) => {
     const { error } = await supabase
@@ -144,6 +157,11 @@ async function main() {
   console.log(
     `Done. merged_children=${mergedChildren} tags_applied=${tagRows.length - tagErrors} tag_errors=${tagErrors}`
   );
+
+  if (tagErrors > 0) process.exitCode = 1;
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

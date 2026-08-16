@@ -1,6 +1,25 @@
 const EARTH_RADIUS_METERS = 6_371_000;
 const METERS_PER_DEGREE_LAT = 111_320;
 
+// Shared cap for any user- or URL-supplied query radius (questionnaire travel
+// time, /swipe and /explore's ?radius= param). Without this, an arbitrarily
+// large value produces a near-global bounding box and an unbounded spot
+// query; a negative value produces an inverted box and an incorrectly empty
+// one. ~185mi (300km) comfortably covers "a long drive," not "the whole
+// country."
+export const MAX_QUERY_RADIUS_METERS = 300_000;
+
+export function clampRadiusMeters(radiusMeters: number): number {
+  if (!Number.isFinite(radiusMeters)) return MAX_QUERY_RADIUS_METERS;
+  return Math.min(Math.max(radiusMeters, 1), MAX_QUERY_RADIUS_METERS);
+}
+
+export function isValidLatLng(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+  );
+}
+
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }

@@ -191,8 +191,9 @@ export function ExploreView({
           </div>
           <Dialog>
             <DialogTrigger
+              disabled={isHeatmapMode}
               render={
-                <Button variant="outline">
+                <Button variant="outline" disabled={isHeatmapMode}>
                   <SlidersHorizontalIcon aria-hidden="true" />
                   Advanced
                 </Button>

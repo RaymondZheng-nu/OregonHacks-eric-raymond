@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CATEGORY_META } from "@/lib/categories";
+import { clampRadiusMeters } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
 
@@ -146,7 +147,7 @@ export function SessionQuestionnaire({ fullWidth }: { fullWidth?: boolean }) {
 
       const minutes = parseFloat(maxMinutes);
       if (Number.isFinite(minutes) && minutes > 0) {
-        params.set("radius", String(minutesToRadiusMeters(minutes, mode)));
+        params.set("radius", String(clampRadiusMeters(minutesToRadiusMeters(minutes, mode))));
       }
     }
 

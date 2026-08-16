@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { BlobBackground } from "@/components/blob-background";
 import { SpotSwipeDeck } from "@/components/spot-swipe-deck";
 import { getVerifiedSpotsInBounds } from "@/lib/supabase/queries.server";
-import { boundingBox } from "@/lib/geo";
+import { boundingBox, clampRadiusMeters, isValidLatLng } from "@/lib/geo";
 import type { SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
 
@@ -37,14 +37,18 @@ export default async function SwipePage({
   const params = await searchParams;
 
   const categories = parseCategories(params.cats);
-  const lat = parseNumber(params.lat);
-  const lng = parseNumber(params.lng);
+  const rawLat = parseNumber(params.lat);
+  const rawLng = parseNumber(params.lng);
   const radiusMeters = parseNumber(params.radius);
 
-  const hasLocation = lat !== null && lng !== null;
-  const center = hasLocation ? { lat, lng } : DEFAULT_CENTER;
-  const radius = radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS;
-  const initialBounds = boundingBox(center.lat, center.lng, radius);
+  // Out-of-range values (bad geocode, hand-edited URL) fall back to the
+  // default center rather than feeding boundingBox a bogus lat/lng — that
+  // would produce a nonsensical or near-global box instead of just failing.
+  const hasLocation = rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
+  const lat = hasLocation ? (rawLat as number) : DEFAULT_CENTER.lat;
+  const lng = hasLocation ? (rawLng as number) : DEFAULT_CENTER.lng;
+  const radius = clampRadiusMeters(radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS);
+  const initialBounds = boundingBox(lat, lng, radius);
 
   const spots = await getVerifiedSpotsInBounds(initialBounds, {
     categories: categories ?? undefined,
@@ -55,7 +59,7 @@ export default async function SwipePage({
       <BlobBackground />
       <SpotSwipeDeck
         spots={spots}
-        userLocation={hasLocation ? { lat: lat as number, lng: lng as number } : undefined}
+        userLocation={hasLocation ? { lat, lng } : undefined}
       />
     </div>
   );

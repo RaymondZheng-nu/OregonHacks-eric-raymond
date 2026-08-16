@@ -6,7 +6,7 @@ import {
   getDistinctAmenities,
   getDistinctClimbingGrades,
 } from "@/lib/supabase/queries.server";
-import { boundingBox } from "@/lib/geo";
+import { boundingBox, clampRadiusMeters, isValidLatLng } from "@/lib/geo";
 import type { SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
 
@@ -43,16 +43,23 @@ export default async function ExplorePage({
   const params = await searchParams;
 
   const categories = parseCategories(params.cats);
-  const lat = parseNumber(params.lat);
-  const lng = parseNumber(params.lng);
+  const rawLat = parseNumber(params.lat);
+  const rawLng = parseNumber(params.lng);
   const radiusMeters = parseNumber(params.radius);
+
+  // Out-of-range values (bad geocode, hand-edited URL) fall back to the
+  // default center rather than feeding boundingBox a bogus lat/lng — that
+  // would produce a nonsensical or near-global box instead of just failing.
+  const hasLocation = rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
+  const lat = hasLocation ? (rawLat as number) : null;
+  const lng = hasLocation ? (rawLng as number) : null;
 
   // A questionnaire-derived location narrows the initial SSR fetch to that
   // area (same bounded-fetch pattern as the plain default) — the map still
   // centers there and users can pan/zoom freely afterward, this only avoids
   // an initial empty-map flash while the client's own viewport fetch spins up.
-  const center = lat !== null && lng !== null ? { lat, lng } : DEFAULT_CENTER;
-  const radius = radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS;
+  const center = hasLocation ? { lat: lat as number, lng: lng as number } : DEFAULT_CENTER;
+  const radius = clampRadiusMeters(radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS);
   const initialBounds = boundingBox(center.lat, center.lng, radius);
 
   const [spots, pendingCount, availableAmenities, availableClimbingGrades] = await Promise.all([
