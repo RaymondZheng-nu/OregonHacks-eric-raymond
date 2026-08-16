@@ -18,11 +18,17 @@ function markerIcon(color: string) {
   });
 }
 
-export function SpotMap({ spots }: { spots: Spot[] }) {
+export function SpotMap({
+  spots,
+  center,
+}: {
+  spots: Spot[];
+  center?: [number, number];
+}) {
   return (
     <MapContainer
-      center={NYC_CENTER}
-      zoom={11}
+      center={center ?? NYC_CENTER}
+      zoom={center ? 13 : 11}
       scrollWheelZoom
       className="h-full w-full"
     >

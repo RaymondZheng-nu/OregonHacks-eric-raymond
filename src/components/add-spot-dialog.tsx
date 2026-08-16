@@ -38,6 +38,7 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [errors, setErrors] = useState<{ name?: string; location?: string }>({});
 
   function useMyLocation() {
     navigator.geolocation.getCurrentPosition(
@@ -51,10 +52,13 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !lat || !lng) {
-      toast.error("Name and coordinates are required");
-      return;
-    }
+
+    const nextErrors: { name?: string; location?: string } = {};
+    if (!name.trim()) nextErrors.name = "Give this spot a name";
+    if (!lat || !lng) nextErrors.location = "Add coordinates or use your location";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
     setSubmitting(true);
 
     try {
@@ -80,6 +84,7 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
       setLng("");
       setPhotoFile(null);
       setCategory("other");
+      setErrors({});
       onSubmitted?.();
       router.refresh();
     } catch {
@@ -109,10 +114,17 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
             <Input
               id="name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+              }}
               placeholder="e.g. Quiet bench behind the library"
+              aria-invalid={!!errors.name}
               required
             />
+            {errors.name && (
+              <p className="text-xs text-destructive">{errors.name}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
@@ -152,21 +164,32 @@ export function AddSpotDialog({ onSubmitted }: { onSubmitted?: () => void }) {
               <Input
                 aria-label="Latitude"
                 value={lat}
-                onChange={(e) => setLat(e.target.value)}
+                onChange={(e) => {
+                  setLat(e.target.value);
+                  if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
+                }}
                 placeholder="Latitude"
+                aria-invalid={!!errors.location}
                 required
               />
               <Input
                 aria-label="Longitude"
                 value={lng}
-                onChange={(e) => setLng(e.target.value)}
+                onChange={(e) => {
+                  setLng(e.target.value);
+                  if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
+                }}
                 placeholder="Longitude"
+                aria-invalid={!!errors.location}
                 required
               />
               <Button type="button" variant="outline" onClick={useMyLocation}>
                 Use my location
               </Button>
             </div>
+            {errors.location && (
+              <p className="text-xs text-destructive">{errors.location}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="photo">Photo</Label>

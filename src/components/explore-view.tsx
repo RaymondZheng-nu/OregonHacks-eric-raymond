@@ -3,13 +3,19 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ClipboardListIcon } from "lucide-react";
+import { ChevronDownIcon, ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CATEGORY_META } from "@/lib/categories";
+import { haversineDistanceMeters } from "@/lib/geo";
 import type { Spot, SpotCategory } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const SpotMap = dynamic(
   () => import("@/components/spot-map").then((m) => m.SpotMap),
@@ -21,17 +27,35 @@ const ALL_CATEGORIES = Object.keys(CATEGORY_META) as SpotCategory[];
 export function ExploreView({
   initialSpots,
   pendingCount,
+  initialActiveCategories,
+  initialCenter,
+  initialRadiusMeters,
 }: {
   initialSpots: Spot[];
   pendingCount: number;
+  initialActiveCategories?: SpotCategory[];
+  initialCenter?: [number, number];
+  initialRadiusMeters?: number;
 }) {
-  const [activeCategories, setActiveCategories] =
-    useState<Set<SpotCategory>>(new Set(ALL_CATEGORIES));
-
-  const visibleSpots = useMemo(
-    () => initialSpots.filter((s) => activeCategories.has(s.category)),
-    [initialSpots, activeCategories]
+  const [activeCategories, setActiveCategories] = useState<Set<SpotCategory>>(
+    new Set(initialActiveCategories ?? [])
   );
+
+  const visibleSpots = useMemo(() => {
+    return initialSpots.filter((s) => {
+      if (!activeCategories.has(s.category)) return false;
+      if (initialCenter && initialRadiusMeters) {
+        const distance = haversineDistanceMeters(
+          initialCenter[0],
+          initialCenter[1],
+          s.lat,
+          s.lng
+        );
+        if (distance > initialRadiusMeters) return false;
+      }
+      return true;
+    });
+  }, [initialSpots, activeCategories, initialCenter, initialRadiusMeters]);
 
   function toggleCategory(category: SpotCategory) {
     setActiveCategories((prev) => {
@@ -51,7 +75,7 @@ export function ExploreView({
         <div>
           <h1 className="text-lg leading-tight">
             <Link
-              href="/about"
+              href="/"
               className="font-logo tracking-tight text-green-700 hover:opacity-90"
             >
               TOUCH GRASS
@@ -63,40 +87,37 @@ export function ExploreView({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div
-            className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
-            role="group"
-            aria-label="Filter by category"
-          >
-            {Object.entries(CATEGORY_META).map(([key, meta]) => {
-              const category = key as SpotCategory;
-              const active = activeCategories.has(category);
-              return (
-                <Badge
-                  key={key}
-                  variant="outline"
-                  render={
-                    <button
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => toggleCategory(category)}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Filter by category"
+              render={<Button variant="outline" />}
+            >
+              Categories ({activeCategories.size}/{ALL_CATEGORIES.length})
+              <ChevronDownIcon
+                aria-hidden="true"
+                className="size-4 text-muted-foreground"
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {Object.entries(CATEGORY_META).map(([key, meta]) => {
+                const category = key as SpotCategory;
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={key}
+                    checked={activeCategories.has(category)}
+                    onCheckedChange={() => toggleCategory(category)}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: meta.color }}
                     />
-                  }
-                  className={cn(
-                    "h-9 shrink-0 cursor-pointer select-none px-3.5 transition-[opacity,transform,background-color,color] duration-200 ease-out motion-safe:active:scale-95",
-                    !active && "opacity-40"
-                  )}
-                  style={{
-                    borderColor: meta.color,
-                    color: active ? meta.color : undefined,
-                    backgroundColor: active ? `${meta.color}1a` : undefined,
-                  }}
-                >
-                  {meta.label}
-                </Badge>
-              );
-            })}
-          </div>
+                    {meta.label}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             nativeButton={false}
@@ -108,10 +129,11 @@ export function ExploreView({
             }
           />
           <AddSpotDialog />
+          <ThemeToggle />
         </div>
       </header>
       <main className="relative flex-1">
-        <SpotMap spots={visibleSpots} />
+        <SpotMap spots={visibleSpots} center={initialCenter} />
         {visibleSpots.length === 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center">
             <div className="pointer-events-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:ease-out rounded-lg border bg-background/95 px-4 py-3 text-center shadow-sm backdrop-blur-xs">
