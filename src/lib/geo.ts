@@ -48,7 +48,13 @@ export type BoundingBox = {
 
 export function boundingBox(lat: number, lng: number, radiusMeters: number): BoundingBox {
   const latDelta = radiusMeters / METERS_PER_DEGREE_LAT;
-  const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(toRadians(lat));
+  // Clamped away from exactly ±90: cos(lat) approaches 0 at the poles, so
+  // metersPerDegreeLng approaches 0 and lngDelta blows up toward a
+  // near-global box. No real query origin is ever actually at the pole
+  // (isValidLatLng's range is a sanity check, not a guarantee of realistic
+  // input), so this only guards the division, not correctness at normal
+  // latitudes.
+  const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(toRadians(Math.min(Math.abs(lat), 89.9)));
   const lngDelta = radiusMeters / metersPerDegreeLng;
 
   return {

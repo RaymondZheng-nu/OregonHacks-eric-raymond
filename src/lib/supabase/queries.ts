@@ -218,12 +218,18 @@ export async function fetchVerifiedSpotsInBounds(
 
 const DEFAULT_NATIONWIDE_SAMPLE_SIZE = 150;
 
-// Raw pool pulled before shuffling: without an ORDER BY, Postgres tends to
-// return rows close to insertion order, which is city-clustered from the
-// 30-city ingestion batches (scripts/ingest-osm-cities.mjs). Pulling a wide
-// pool before shuffling guarantees the returned sample actually spans many
-// cities instead of just whichever city happens to sort first.
-const NATIONWIDE_RAW_POOL_SIZE = 5000;
+// Raw pool pulled before shuffling. This has to comfortably exceed the
+// table's total matching-row count, not just be "large": without an
+// ORDER BY, `.limit()` doesn't take a random sample of all matching rows —
+// Postgres returns whatever subset it scans first (in practice, close to
+// insertion order, i.e. city-clustered from the 30-city ingestion batches in
+// scripts/ingest-osm-cities.mjs), and every row outside that subset is
+// permanently excluded from ever being sampled, no matter how the shuffle
+// below reorders what did come back. At ~21k total spots today, 25k covers
+// the whole table; if ingestion grows well past that, this needs to become a
+// real database-side random sample (e.g. an `ORDER BY random() LIMIT n` RPC)
+// instead of a bigger constant.
+const NATIONWIDE_RAW_POOL_SIZE = 25_000;
 
 // No-bounds counterpart to fetchVerifiedSpotsInBounds, for when there's no
 // location context to scope a viewport to (e.g. the questionnaire's address
