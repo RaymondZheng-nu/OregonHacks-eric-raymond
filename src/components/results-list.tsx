@@ -31,6 +31,14 @@ const REFINE_OPTIONS: { key: RefineKey; label: string }[] = [
   { key: "best-rated", label: "Best rated" },
 ];
 
+// Reveal in small batches instead of dumping the whole pool (up to
+// POOL_LIMIT in results/page.tsx) on the user at once — "1 of 40 matches"
+// reads as overwhelming even one-at-a-time. "Generate more" grows the
+// revealed slice without a network round trip, since the full pool is
+// already sitting in memory.
+const INITIAL_REVEAL = 5;
+const REVEAL_STEP = 5;
+
 export function ResultsList({
   spots,
   exploreParams,
@@ -47,6 +55,7 @@ export function ResultsList({
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [activeRefines, setActiveRefines] = useState<Set<RefineKey>>(new Set());
+  const [revealCount, setRevealCount] = useState(INITIAL_REVEAL);
 
   function toggleRefine(key: RefineKey) {
     setActiveRefines((prev) => {
@@ -56,6 +65,7 @@ export function ResultsList({
       return next;
     });
     setIndex(0);
+    setRevealCount(INITIAL_REVEAL);
   }
 
   // "Bigger" can empty the pool for a niche search — fall back to the full
@@ -80,18 +90,27 @@ export function ResultsList({
     return 0;
   });
 
+  // Only ever page through what's actually been revealed — "Generate more"
+  // grows this without touching index/goPrev/goNext.
+  const visiblePool = sortedPool.slice(0, revealCount);
+  const hasMore = revealCount < sortedPool.length;
+
   function goPrev() {
-    setIndex((i) => (i - 1 + sortedPool.length) % sortedPool.length);
+    setIndex((i) => (i - 1 + visiblePool.length) % visiblePool.length);
   }
 
   function goNext() {
-    setIndex((i) => (i + 1) % sortedPool.length);
+    setIndex((i) => (i + 1) % visiblePool.length);
+  }
+
+  function generateMore() {
+    setRevealCount((c) => Math.min(c + REVEAL_STEP, sortedPool.length));
   }
 
   // Same left/right paging as the on-screen arrows, for anyone who'd rather
   // use the keyboard once the popup has focus.
   useEffect(() => {
-    if (sortedPool.length === 0) return;
+    if (visiblePool.length === 0) return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "ArrowLeft") goPrev();
       if (e.key === "ArrowRight") goNext();
@@ -101,8 +120,8 @@ export function ResultsList({
     // listener on window ever sees the event.
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- goPrev/goNext close over sortedPool.length only, which this effect already re-runs on.
-  }, [sortedPool.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- goPrev/goNext close over visiblePool.length only, which this effect already re-runs on.
+  }, [visiblePool.length]);
 
   function handleOpenChange(open: boolean) {
     // This page's whole purpose is the popup — closing it means "I'm done
@@ -126,7 +145,7 @@ export function ResultsList({
     );
   }
 
-  const spot = sortedPool[index];
+  const spot = visiblePool[index];
   const verdict = getSpotVerdict(spot);
   const matchChips = getMatchChips(spot, filters);
   const viewParams = new URLSearchParams(exploreParams);
@@ -140,7 +159,7 @@ export function ResultsList({
         <DialogHeader>
           <DialogTitle className="truncate">{spot.name}</DialogTitle>
           <DialogDescription>
-            {index + 1} of {sortedPool.length} matches
+            {index + 1} of {visiblePool.length} matches
           </DialogDescription>
         </DialogHeader>
 
@@ -182,7 +201,7 @@ export function ResultsList({
             />
           )}
 
-          {sortedPool.length > 1 && (
+          {visiblePool.length > 1 && (
             <>
               <button
                 type="button"
@@ -230,6 +249,11 @@ export function ResultsList({
         </div>
 
         <DialogFooter>
+          {hasMore && (
+            <Button type="button" variant="outline" onClick={generateMore}>
+              Generate more
+            </Button>
+          )}
           <Button
             nativeButton={false}
             render={
