@@ -42,6 +42,30 @@ export function boundingBox(lat: number, lng: number, radiusMeters: number): Bou
 
 export type LatLng = { lat: number; lng: number };
 
+// Planar shoelace formula on an equirectangular projection centered at the
+// ring's own latitude. Not geodesically exact, but the error at city/park
+// scale is negligible relative to the area thresholds this feeds (hundreds
+// to thousands of m²) — the same proportionate-rigor tradeoff as the
+// haversine/boundingBox helpers above, not a survey-grade calculation.
+export function polygonAreaM2(ring: LatLng[]): number {
+  if (ring.length < 3) return 0;
+
+  const refLat = ring[0].lat;
+  const metersPerDegLng = METERS_PER_DEGREE_LAT * Math.cos(toRadians(refLat));
+  const points = ring.map((point) => ({
+    x: point.lng * metersPerDegLng,
+    y: point.lat * METERS_PER_DEGREE_LAT,
+  }));
+
+  let twiceArea = 0;
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length;
+    twiceArea += points[i].x * points[j].y - points[j].x * points[i].y;
+  }
+
+  return Math.abs(twiceArea) / 2;
+}
+
 export type GeoJsonGeometry =
   | { type: "Point"; coordinates: [number, number] }
   | { type: "Polygon"; coordinates: number[][][] }
