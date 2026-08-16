@@ -9,6 +9,8 @@ export const CATEGORY_META: Record<
   garden: { label: "Garden", color: "#db2777" },
   climbing: { label: "Climbing", color: "#ea580c" },
   birdwatching: { label: "Birdwatching", color: "#0284c7" },
+  abandoned: { label: "Abandoned", color: "#57534e" },
+  hangout: { label: "Hangout", color: "#f59e0b" },
   other: { label: "Other", color: "#7c3aed" },
 };
 

@@ -4,6 +4,8 @@ export type SpotCategory =
   | "garden"
   | "climbing"
   | "birdwatching"
+  | "abandoned"
+  | "hangout"
   | "other";
 
 export type SpotSource = "official" | "user" | "osm" | "reddit";

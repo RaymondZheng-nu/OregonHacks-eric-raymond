@@ -3,7 +3,7 @@ create table if not exists spots (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
-  category text not null, -- 'park' | 'tree' | 'garden' | 'climbing' | 'birdwatching' | 'other'
+  category text not null, -- 'park' | 'tree' | 'garden' | 'climbing' | 'birdwatching' | 'abandoned' | 'hangout' | 'other'
   source text not null default 'user', -- 'official' (city/state open-data portal) | 'user' (self-reported) | 'osm' (OpenStreetMap) | 'reddit' (social-sourced mention)
   status text not null default 'verified', -- 'pending' | 'verified' | 'rejected' (junk, size-filtered) | 'merged' (collapsed into a parent, see merged_into)
   confirm_count integer not null default 0,

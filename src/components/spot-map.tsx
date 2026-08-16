@@ -138,10 +138,12 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
 export function SpotMap({
   initialSpots,
   categories,
+  initialCenter,
   onViewChange,
 }: {
   initialSpots: Spot[];
   categories: Set<SpotCategory>;
+  initialCenter?: [number, number];
   onViewChange?: (info: { count: number; mode: MapMode }) => void;
 }) {
   const [viewport, setViewport] = useState<Viewport | null>(null);
@@ -234,8 +236,8 @@ export function SpotMap({
 
   return (
     <MapContainer
-      center={NYC_CENTER}
-      zoom={DEFAULT_ZOOM}
+      center={initialCenter ?? NYC_CENTER}
+      zoom={initialCenter ? 13 : DEFAULT_ZOOM}
       scrollWheelZoom
       className="h-full w-full"
     >

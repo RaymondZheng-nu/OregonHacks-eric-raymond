@@ -3,14 +3,19 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ClipboardListIcon } from "lucide-react";
+import { ChevronDownIcon, ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CATEGORY_META } from "@/lib/categories";
 import type { Spot, SpotCategory } from "@/lib/types";
 import type { MapMode } from "@/components/spot-map";
-import { cn } from "@/lib/utils";
 
 const SpotMap = dynamic(
   () => import("@/components/spot-map").then((m) => m.SpotMap),
@@ -22,12 +27,20 @@ const ALL_CATEGORIES = Object.keys(CATEGORY_META) as SpotCategory[];
 export function ExploreView({
   initialSpots,
   pendingCount,
+  initialActiveCategories,
+  initialCenter,
 }: {
   initialSpots: Spot[];
   pendingCount: number;
+  initialActiveCategories?: SpotCategory[];
+  initialCenter?: [number, number];
 }) {
-  const [activeCategories, setActiveCategories] =
-    useState<Set<SpotCategory>>(new Set(ALL_CATEGORIES));
+  // Falls back to every category when the questionnaire didn't specify any
+  // (e.g. visiting /explore directly) — an empty initial Set would otherwise
+  // read as "nothing selected" and show a blank map on first load.
+  const [activeCategories, setActiveCategories] = useState<Set<SpotCategory>>(
+    new Set(initialActiveCategories?.length ? initialActiveCategories : ALL_CATEGORIES)
+  );
   const [visibleCount, setVisibleCount] = useState(initialSpots.length);
   const [mapMode, setMapMode] = useState<MapMode>("markers");
   const isHeatmapMode = mapMode === "heatmap";
@@ -50,7 +63,7 @@ export function ExploreView({
         <div>
           <h1 className="text-lg leading-tight">
             <Link
-              href="/about"
+              href="/"
               className="font-logo tracking-tight text-green-700 hover:opacity-90"
             >
               TOUCH GRASS
@@ -62,46 +75,38 @@ export function ExploreView({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-col gap-1">
-            <div
-              className={cn(
-                "flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0",
-                isHeatmapMode && "opacity-50"
-              )}
-              role="group"
-              aria-label="Filter by category"
-              aria-disabled={isHeatmapMode}
-            >
-              {Object.entries(CATEGORY_META).map(([key, meta]) => {
-                const category = key as SpotCategory;
-                const active = activeCategories.has(category);
-                return (
-                  <Badge
-                    key={key}
-                    variant="outline"
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={active}
-                        disabled={isHeatmapMode}
-                        onClick={() => toggleCategory(category)}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Filter by category"
+                disabled={isHeatmapMode}
+                render={<Button variant="outline" disabled={isHeatmapMode} />}
+              >
+                Categories ({activeCategories.size}/{ALL_CATEGORIES.length})
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground"
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {Object.entries(CATEGORY_META).map(([key, meta]) => {
+                  const category = key as SpotCategory;
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={key}
+                      checked={activeCategories.has(category)}
+                      onCheckedChange={() => toggleCategory(category)}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: meta.color }}
                       />
-                    }
-                    className={cn(
-                      "h-9 shrink-0 select-none px-3.5 transition-[opacity,transform,background-color,color] duration-200 ease-out",
-                      isHeatmapMode ? "cursor-not-allowed" : "cursor-pointer motion-safe:active:scale-95",
-                      !active && "opacity-40"
-                    )}
-                    style={{
-                      borderColor: meta.color,
-                      color: active ? meta.color : undefined,
-                      backgroundColor: active ? `${meta.color}1a` : undefined,
-                    }}
-                  >
-                    {meta.label}
-                  </Badge>
-                );
-              })}
-            </div>
+                      {meta.label}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {isHeatmapMode && (
               <p className="text-xs text-muted-foreground">
                 Zoom in to filter by category
@@ -119,12 +124,14 @@ export function ExploreView({
             }
           />
           <AddSpotDialog />
+          <ThemeToggle />
         </div>
       </header>
       <main className="relative flex-1">
         <SpotMap
           initialSpots={initialSpots}
           categories={activeCategories}
+          initialCenter={initialCenter}
           onViewChange={({ count, mode }) => {
             setVisibleCount(count);
             setMapMode(mode);

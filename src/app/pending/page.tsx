@@ -1,10 +1,19 @@
+import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { getPendingSpots } from "@/lib/supabase/queries.server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmSpotButton } from "@/components/confirm-spot-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { CATEGORY_META } from "@/lib/categories";
+
+// Internal moderation queue, not a page worth ranking in search.
+export const metadata: Metadata = {
+  title: "Review Submissions",
+  robots: { index: false, follow: false },
+};
 
 export default async function PendingPage() {
   const spots = await getPendingSpots();
@@ -20,11 +29,14 @@ export default async function PendingPage() {
             New spots wait here until the community confirms they&apos;re real.
           </p>
         </div>
-        <Button
-          variant="outline"
-          nativeButton={false}
-          render={<Link href="/">Back to map</Link>}
-        />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/explore">Back to map</Link>}
+          />
+          <ThemeToggle />
+        </div>
       </div>
 
       {spots.length === 0 && (
@@ -54,12 +66,15 @@ export default async function PendingPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               {spot.photo_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={spot.photo_url}
-                  alt={spot.name}
-                  className="h-40 w-full rounded object-cover"
-                />
+                <div className="relative h-40 w-full overflow-hidden rounded">
+                  <Image
+                    src={spot.photo_url}
+                    alt={spot.name}
+                    fill
+                    sizes="(min-width: 672px) 640px, 100vw"
+                    className="object-cover"
+                  />
+                </div>
               )}
               {spot.description && (
                 <p className="text-sm">{spot.description}</p>
