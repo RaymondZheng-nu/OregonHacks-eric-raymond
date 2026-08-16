@@ -29,5 +29,6 @@ export type Spot = {
   activity_fit: string[] | null;
   amenities: string[] | null;
   accessibility: string | null;
+  climbing_grade: string | null;
   created_at: string;
 };

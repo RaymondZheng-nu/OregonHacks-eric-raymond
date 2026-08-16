@@ -150,7 +150,7 @@ export function SessionQuestionnaire({ fullWidth }: { fullWidth?: boolean }) {
       }
     }
 
-    router.push(`/explore?${params.toString()}`);
+    router.push(`/swipe?${params.toString()}`);
   }
 
   return (

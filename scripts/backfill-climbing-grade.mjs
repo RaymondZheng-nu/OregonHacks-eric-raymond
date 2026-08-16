@@ -46,10 +46,20 @@ function parseExternalId(externalId) {
 }
 
 // Same preference order as scripts/ingest-osm.mjs's extractClimbingGrade —
-// French sport grades and YDS aren't a clean conversion, so this takes
-// whichever tag is present rather than normalizing to one scale.
+// French sport, YDS (roped routes), and Hueco/V-scale (boulder problems)
+// aren't a clean conversion, so this takes whichever tag is present rather
+// than normalizing to one scale. `yds_class` shows up alongside/instead of
+// `yds` on mapper-authored route nodes (e.g. Mountain Project imports).
 function extractClimbingGrade(tags = {}) {
-  return tags["climbing:grade:french"] ?? tags["climbing:grade:yds"] ?? tags["climbing:grade"] ?? null;
+  return (
+    tags["climbing:grade:french"] ??
+    tags["climbing:grade:yds"] ??
+    tags["climbing:grade:yds_class"] ??
+    tags["climbing:grade:hueco"] ??
+    tags["climbing:grade:font"] ??
+    tags["climbing:grade"] ??
+    null
+  );
 }
 
 function sleep(ms) {

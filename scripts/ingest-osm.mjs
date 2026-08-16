@@ -83,11 +83,21 @@ out geom;
 `.trim();
 }
 
-// OSM has no single climbing grade scale — French sport grades and YDS
-// aren't a clean conversion — so this takes whichever tag is present,
-// preferred in that order, and stores it verbatim rather than normalizing.
+// OSM has no single climbing grade scale — French sport, YDS (roped routes),
+// and Hueco/V-scale (boulder problems) aren't a clean conversion — so this
+// takes whichever tag is present, preferred in that order, and stores it
+// verbatim rather than normalizing. `yds_class` shows up alongside/instead
+// of `yds` on mapper-authored route nodes (e.g. Mountain Project imports).
 function extractClimbingGrade(tags = {}) {
-  return tags["climbing:grade:french"] ?? tags["climbing:grade:yds"] ?? tags["climbing:grade"] ?? null;
+  return (
+    tags["climbing:grade:french"] ??
+    tags["climbing:grade:yds"] ??
+    tags["climbing:grade:yds_class"] ??
+    tags["climbing:grade:hueco"] ??
+    tags["climbing:grade:font"] ??
+    tags["climbing:grade"] ??
+    null
+  );
 }
 
 function mapCategory(tags = {}) {

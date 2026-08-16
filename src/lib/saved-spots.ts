@@ -73,3 +73,13 @@ export function skipSpot(id: string): void {
   existing.add(id);
   window.sessionStorage.setItem(SKIPPED_KEY, JSON.stringify(Array.from(existing)));
 }
+
+// Undo for the swipe deck's "back" button — reverses whichever of
+// skipSpot/saveSpot was just called, so a misswipe isn't permanent for the
+// rest of the session.
+export function unskipSpot(id: string): void {
+  if (typeof window === "undefined") return;
+  const next = getSkippedSpotIds();
+  next.delete(id);
+  window.sessionStorage.setItem(SKIPPED_KEY, JSON.stringify(Array.from(next)));
+}

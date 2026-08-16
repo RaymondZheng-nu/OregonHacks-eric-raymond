@@ -67,9 +67,7 @@ export default async function LandingPage() {
             TOUCH GRASS
           </h1>
           <p className="mt-4 max-w-md text-lg text-muted-foreground text-pretty">
-            Yeah, you. Close the app, get off the couch, there&apos;s a whole
-            outside out there. Real parks and quiet spots near you, from
-            people who actually left the house to find them.
+            Yeah, you. Stop rotting and [TITLE CARD]
           </p>
           <div id="hero-cta" className="mt-6 flex flex-col items-start gap-2">
             <SessionQuestionnaire />

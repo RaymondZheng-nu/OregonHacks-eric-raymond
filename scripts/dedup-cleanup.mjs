@@ -155,6 +155,10 @@ function computeAmenities(tags) {
   const amenities = [];
   if (tags.natural === "water" || tags.water) amenities.push("water_feature");
   if (tags.surface === "grass") amenities.push("open_lawn");
+  // leisure=sports_centre is OSM's tag for an indoor commercial facility —
+  // distinguishes climbing gyms from outdoor crags/boulders, which don't
+  // carry this tag, without dropping gyms from the category entirely.
+  if (tags.leisure === "sports_centre") amenities.push("indoor_gym");
   return amenities.length > 0 ? amenities : null;
 }
 
