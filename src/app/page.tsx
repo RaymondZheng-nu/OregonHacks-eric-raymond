@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ClipboardListIcon } from "lucide-react";
+import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { FeaturedSpotlight } from "@/components/featured-spotlight";
 import { StartSessionDialog } from "@/components/start-session-dialog";
 import { StickyMobileCta } from "@/components/sticky-mobile-cta";
@@ -52,6 +53,7 @@ export default async function LandingPage() {
                 </Link>
               }
             />
+            <AddSpotDialog triggerSize="sm" />
             <ThemeToggle />
           </div>
         </div>
