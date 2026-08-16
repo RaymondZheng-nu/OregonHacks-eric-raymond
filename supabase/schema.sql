@@ -144,7 +144,7 @@ begin
       and lat between min_lat and max_lat
       and lng between min_lng and max_lng
     group by 1, 2
-    limit 5000;
+    limit 20000;
 end;
 $$;
 
