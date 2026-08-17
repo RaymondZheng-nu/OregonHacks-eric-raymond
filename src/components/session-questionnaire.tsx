@@ -21,19 +21,12 @@ import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
 import { VIBE_OPTIONS } from "@/lib/vibes";
 import { clampRadiusMeters } from "@/lib/geo";
 import { geocodeAddress } from "@/lib/geocode";
+import { PORTLAND_CENTER } from "@/lib/search-params";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
 
 const MY_LOCATION_LABEL = "My current location";
 const TOTAL_STEPS = 3;
-
-// Where the address step falls back to when skipped — see handleSubmit.
-// Not a nationwide sample: the dedup/junk-size cleanup pass has only ever
-// been run against Portland metro and NYC data, and skipping this step is
-// the fastest path through the quiz (likely the one most people actually
-// take), so it can't risk surfacing uncleaned duplicates or sub-floor junk
-// from everywhere else. Portland over NYC because this is OregonHacks.
-const PORTLAND_COORDS = { lat: 45.5152, lng: -122.6784 };
 
 type TransportMode = "walk" | "bike" | "drive" | "transit";
 
@@ -204,11 +197,17 @@ export function SessionQuestionnaire({
         );
       }
     } else {
-      // No radius set here on purpose — boundsFromSearch's own default
-      // (DEFAULT_VIEWPORT_RADIUS_METERS, ~25km) applies, the same scoping
-      // radius every other no-radius search already gets.
-      params.set("lat", String(PORTLAND_COORDS.lat));
-      params.set("lng", String(PORTLAND_COORDS.lng));
+      // Not a nationwide sample: the dedup/junk-size cleanup pass has only
+      // ever been run against Portland metro and NYC data, and skipping
+      // this step is the fastest path through the quiz (likely the one
+      // most people actually take), so it can't risk surfacing uncleaned
+      // duplicates or sub-floor junk from everywhere else. Portland over
+      // NYC because this is OregonHacks. No radius set here on purpose —
+      // boundsFromSearch's own default (DEFAULT_VIEWPORT_RADIUS_METERS,
+      // ~25km) applies, the same scoping radius every other no-radius
+      // search already gets.
+      params.set("lat", String(PORTLAND_CENTER.lat));
+      params.set("lng", String(PORTLAND_CENTER.lng));
     }
 
     setOpen(false);
