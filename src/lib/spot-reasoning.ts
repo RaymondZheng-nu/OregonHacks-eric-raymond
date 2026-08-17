@@ -27,6 +27,34 @@ const ACTIVITY_LABELS: Record<string, string> = {
   sports: "Good for getting active",
 };
 
+// Standalone "why this result exists at all" chip — pulled out of
+// getMatchChips so callers with their own badge layout (the swipe deck
+// already renders climbing_grade/size_class/accessibility/amenities badges)
+// can prepend just the match reason instead of getting a redundant
+// size_class chip mixed in.
+export function getMatchReasonChip(
+  spot: Pick<Spot, "category" | "activity_fit" | "size_class">,
+  filters: MatchFilters,
+): string | null {
+  if (filters.categories?.includes(spot.category)) {
+    return CATEGORY_META[spot.category].label;
+  }
+  if (filters.activity && spot.activity_fit?.includes(filters.activity)) {
+    const vibe = VIBE_OPTIONS.find(
+      (option) =>
+        option.kind === "activity" && option.activity === filters.activity,
+    );
+    if (vibe) return vibe.label;
+  }
+  if (
+    filters.picnic &&
+    (spot.size_class === "medium" || spot.size_class === "large")
+  ) {
+    return "Picnic-worthy";
+  }
+  return null;
+}
+
 // Every chip traces to a real column already on the row — same no-fabrication
 // rule spot-verdict.ts follows. Capped at a handful of chips: judges get
 // about two minutes per team, so this favors "why this matched" over an
@@ -38,23 +66,8 @@ export function getMatchChips(
   const chips: string[] = [];
 
   // 1. Why this result exists at all.
-  if (filters.categories?.includes(spot.category)) {
-    chips.push(CATEGORY_META[spot.category].label);
-  } else if (
-    filters.activity &&
-    spot.activity_fit?.includes(filters.activity)
-  ) {
-    const vibe = VIBE_OPTIONS.find(
-      (option) =>
-        option.kind === "activity" && option.activity === filters.activity,
-    );
-    if (vibe) chips.push(vibe.label);
-  } else if (
-    filters.picnic &&
-    (spot.size_class === "medium" || spot.size_class === "large")
-  ) {
-    chips.push("Picnic-worthy");
-  }
+  const reasonChip = getMatchReasonChip(spot, filters);
+  if (reasonChip) chips.push(reasonChip);
 
   // 2. Size, when known.
   if (spot.size_class) {

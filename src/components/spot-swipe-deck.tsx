@@ -15,53 +15,39 @@ import {
   Undo2Icon,
   MapIcon,
   BookmarkIcon,
-  TreesIcon,
-  TreePineIcon,
-  Flower2Icon,
   MountainIcon,
-  BirdIcon,
-  WarehouseIcon,
-  UsersIcon,
-  MapPinIcon,
   AccessibilityIcon,
   RulerIcon,
   DumbbellIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
 import { CATEGORY_META } from "@/lib/categories";
 import { haversineDistanceMeters } from "@/lib/geo";
-import { saveSpot, skipSpot, unskipSpot, removeSavedSpot, getSkippedSpotIds, getSavedSpots } from "@/lib/saved-spots";
-import type { Spot, SpotCategory } from "@/lib/types";
+import { getSpotVerdict } from "@/lib/spot-verdict";
+import {
+  formatDistance,
+  getMatchReasonChip,
+  type MatchFilters,
+} from "@/lib/spot-reasoning";
+import { cn } from "@/lib/utils";
+import {
+  saveSpot,
+  skipSpot,
+  unskipSpot,
+  removeSavedSpot,
+  getSkippedSpotIds,
+  getSavedSpots,
+} from "@/lib/saved-spots";
+import type { Spot } from "@/lib/types";
 
-const METERS_PER_MILE = 1609.34;
 // Past this offset (px) or this velocity (px/s), a drag release commits to
 // a swipe instead of snapping back — two independent triggers so a fast
 // flick past a lower distance still registers, same idea as native swipe
 // gesture thresholds.
 const SWIPE_DISTANCE_THRESHOLD = 120;
 const SWIPE_VELOCITY_THRESHOLD = 500;
-
-function formatDistance(meters: number): string {
-  const miles = meters / METERS_PER_MILE;
-  if (miles < 0.1) return "nearby";
-  return `${miles.toFixed(1)} mi away`;
-}
-
-// Same category set as categories.ts's CATEGORY_META — a per-category icon
-// for the no-photo placeholder, since most rows still have no photo_url
-// (see handoff notes: photo backfill deliberately deferred) and a blank
-// color swatch reads as broken, not "no photo yet."
-const CATEGORY_ICON: Record<SpotCategory, typeof TreesIcon> = {
-  park: TreesIcon,
-  tree: TreePineIcon,
-  garden: Flower2Icon,
-  climbing: MountainIcon,
-  birdwatching: BirdIcon,
-  abandoned: WarehouseIcon,
-  hangout: UsersIcon,
-  other: MapPinIcon,
-};
 
 function formatAmenity(amenity: string): string {
   if (amenity === "indoor_gym") return "Indoor gym";
@@ -73,11 +59,15 @@ type SwipeDirection = "left" | "right";
 function SwipeCard({
   spot,
   distanceMeters,
+  filters,
+  exploreParams,
   onResolved,
   isTop,
 }: {
   spot: Spot;
   distanceMeters: number | null;
+  filters: MatchFilters;
+  exploreParams: string;
   onResolved: (direction: SwipeDirection) => void;
   isTop: boolean;
 }) {
@@ -99,6 +89,15 @@ function SwipeCard({
       onResolved("right");
     }
   }
+
+  const verdict = getSpotVerdict(spot);
+  const reasonChip = getMatchReasonChip(spot, filters);
+  const distanceLabel = formatDistance(distanceMeters);
+
+  const viewParams = new URLSearchParams(exploreParams);
+  viewParams.set("spot", spot.id);
+  viewParams.set("lat", String(spot.lat));
+  viewParams.set("lng", String(spot.lng));
 
   return (
     <motion.div
@@ -130,24 +129,11 @@ function SwipeCard({
               draggable={false}
             />
           ) : (
-            <div
-              className="flex h-full w-full items-center justify-center"
-              style={{
-                backgroundImage: `radial-gradient(circle at 50% 40%, ${CATEGORY_META[spot.category].color}33, ${CATEGORY_META[spot.category].color}0d)`,
-              }}
-              aria-hidden="true"
-            >
-              {(() => {
-                const Icon = CATEGORY_ICON[spot.category];
-                return (
-                  <Icon
-                    aria-hidden="true"
-                    className="size-16"
-                    style={{ color: `${CATEGORY_META[spot.category].color}80` }}
-                  />
-                );
-              })()}
-            </div>
+            <SpotLocationPreview
+              lat={spot.lat}
+              lng={spot.lng}
+              category={spot.category}
+            />
           )}
           {isTop && (
             <>
@@ -167,18 +153,21 @@ function SwipeCard({
           )}
         </div>
         <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-4">
-          <p className="text-lg font-semibold leading-tight text-balance">{spot.name}</p>
+          <p className="text-lg font-semibold leading-tight text-balance">
+            {spot.name}
+          </p>
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <span>{CATEGORY_META[spot.category].label}</span>
-            {distanceMeters !== null && (
+            {distanceLabel && (
               <>
                 <span>·</span>
-                <span>{formatDistance(distanceMeters)}</span>
+                <span>{distanceLabel}</span>
               </>
             )}
           </div>
 
           <div className="mt-0.5 flex flex-wrap gap-1.5">
+            {reasonChip && <Badge variant="outline">{reasonChip}</Badge>}
             {spot.climbing_grade && (
               <Badge variant="outline">
                 <MountainIcon aria-hidden="true" />
@@ -205,7 +194,9 @@ function SwipeCard({
             )}
             {spot.amenities?.map((amenity) => (
               <Badge key={amenity} variant="outline">
-                {amenity === "indoor_gym" && <DumbbellIcon aria-hidden="true" />}
+                {amenity === "indoor_gym" && (
+                  <DumbbellIcon aria-hidden="true" />
+                )}
                 {formatAmenity(amenity)}
               </Badge>
             ))}
@@ -216,6 +207,29 @@ function SwipeCard({
               {spot.description}
             </p>
           )}
+
+          <p
+            className={cn(
+              "text-xs",
+              verdict.tone === "caution"
+                ? "text-destructive"
+                : "text-muted-foreground",
+            )}
+          >
+            {verdict.label}
+          </p>
+
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            className="mt-1 self-start"
+            render={
+              <Link href={`/explore?${viewParams.toString()}`}>
+                View on map
+              </Link>
+            }
+          />
         </div>
       </div>
     </motion.div>
@@ -227,6 +241,12 @@ function SwipeCard({
 // responds to a gesture.
 const VISIBLE_STACK_DEPTH = 3;
 
+// Reveal in small batches instead of dropping the whole server-fetched pool
+// into the deck at once — matches /results' old cadence ("Generate more"
+// instead of "here are all 40 at once").
+const INITIAL_REVEAL = 5;
+const REVEAL_STEP = 5;
+
 function SwipeNavBar({ savedCount }: { savedCount: number }) {
   return (
     <div className="flex w-full max-w-sm items-center justify-between px-1 pt-2">
@@ -237,7 +257,9 @@ function SwipeNavBar({ savedCount }: { savedCount: number }) {
         <MapIcon aria-hidden="true" className="size-4" />
         Map view
       </Link>
-      <span className="font-logo text-sm tracking-tight text-green-700">TOUCH GRASS</span>
+      <span className="font-logo text-sm tracking-tight text-green-700">
+        TOUCH GRASS
+      </span>
       <Link
         href="/saved"
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -263,27 +285,41 @@ function SwipeNavBar({ savedCount }: { savedCount: number }) {
 // operation this can't happen (already-saved spots never enter the deck —
 // see initialDeck below), kept as defense in depth against future code paths
 // that add cards to the deck some other way.
-type HistoryEntry = { spot: Spot; direction: SwipeDirection; savedNew: boolean };
+type HistoryEntry = {
+  spot: Spot;
+  direction: SwipeDirection;
+  savedNew: boolean;
+};
 
 export function SpotSwipeDeck({
   spots,
   userLocation,
+  filters,
+  exploreParams,
 }: {
   spots: Spot[];
   userLocation?: { lat: number; lng: number };
+  filters: MatchFilters;
+  exploreParams: string;
 }) {
   // Deck starts as the raw server-provided `spots` — matching the server
   // render exactly (SSR has no localStorage/sessionStorage access, so it
   // can't know what's already skipped/saved). Filtering by skipped/saved ids
-  // happens in the mount effect below, client-only, after hydration —
-  // filtering here via useMemo would run during the client's first render
-  // pass too, produce a shorter array than the server-rendered HTML, and
-  // trigger a React hydration mismatch the moment any prior-session
-  // skip/save history overlaps the new deck.
+  // *and* slicing down to the first revealed batch happens in the mount
+  // effect below, client-only, after hydration — doing either via useMemo
+  // would run during the client's first render pass too, produce a shorter
+  // array than the server-rendered HTML, and trigger a React hydration
+  // mismatch the moment any prior-session skip/save history overlaps the
+  // new deck.
   const [deck, setDeck] = useState<Spot[]>(spots);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [savedCount, setSavedCount] = useState(0);
+  // Revealed-so-far count, not the full server pool size — grows by
+  // REVEAL_STEP each time "Generate more" is clicked, so the progress bar
+  // reads sensibly ("2 of 5", then "2 of 10") instead of jumping straight to
+  // the full pool size on the very first card.
   const [totalCount, setTotalCount] = useState(spots.length);
+  const [hasMoreInPool, setHasMoreInPool] = useState(false);
 
   // Mirrors of `deck`/`history` that are always synchronously current —
   // unlike the state values, which only reflect the latest call once React
@@ -296,6 +332,11 @@ export function SpotSwipeDeck({
   // see the effect of the one before it.
   const deckRef = useRef(spots);
   const historyRef = useRef<HistoryEntry[]>([]);
+  // Filtered spots not yet revealed into the deck — populated once on
+  // mount, drained by generateMore(). Doesn't need to be state: it never
+  // renders directly, only gates the "Generate more" button via
+  // hasMoreInPool.
+  const poolRef = useRef<Spot[]>([]);
 
   useEffect(() => {
     // One-time hydration from localStorage/sessionStorage after mount — same
@@ -309,13 +350,19 @@ export function SpotSwipeDeck({
     const skipped = getSkippedSpotIds();
     const saved = getSavedSpots();
     const savedIds = new Set(saved.map((s) => s.id));
-    const filtered = spots.filter((spot) => !skipped.has(spot.id) && !savedIds.has(spot.id));
+    const filtered = spots.filter(
+      (spot) => !skipped.has(spot.id) && !savedIds.has(spot.id),
+    );
 
-    deckRef.current = filtered;
+    const revealed = filtered.slice(0, INITIAL_REVEAL);
+    poolRef.current = filtered.slice(INITIAL_REVEAL);
+
+    deckRef.current = revealed;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDeck(filtered);
-    setTotalCount(filtered.length);
+    setDeck(revealed);
+    setTotalCount(revealed.length);
     setSavedCount(saved.length);
+    setHasMoreInPool(poolRef.current.length > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount to apply client-only storage filtering; re-running on `spots` identity would fight user-driven deck state after the first swipe.
   }, []);
 
@@ -331,7 +378,10 @@ export function SpotSwipeDeck({
       skipSpot(top.id);
     }
 
-    historyRef.current = [...historyRef.current, { spot: top, direction, savedNew }];
+    historyRef.current = [
+      ...historyRef.current,
+      { spot: top, direction, savedNew },
+    ];
     setHistory(historyRef.current);
     deckRef.current = rest;
     setDeck(rest);
@@ -355,6 +405,19 @@ export function SpotSwipeDeck({
     setDeck(deckRef.current);
     historyRef.current = currentHistory.slice(0, -1);
     setHistory(historyRef.current);
+  }
+
+  // Pulls the next REVEAL_STEP spots out of the not-yet-revealed pool and
+  // into the deck — only reachable from the empty-deck state, so deckRef is
+  // always [] here, but appending (not replacing) keeps this safe even if
+  // that ever changes.
+  function generateMore() {
+    const next = poolRef.current.slice(0, REVEAL_STEP);
+    poolRef.current = poolRef.current.slice(REVEAL_STEP);
+    deckRef.current = [...deckRef.current, ...next];
+    setDeck(deckRef.current);
+    setTotalCount((c) => c + next.length);
+    setHasMoreInPool(poolRef.current.length > 0);
   }
 
   // Desktop/demo affordance — left/right arrows swipe, backspace undoes.
@@ -383,6 +446,11 @@ export function SpotSwipeDeck({
             Check your saved spots, or browse the full map instead.
           </p>
           <div className="mt-2 flex items-center gap-3">
+            {hasMoreInPool && (
+              <Button variant="outline" onClick={generateMore}>
+                Generate more
+              </Button>
+            )}
             {history.length > 0 && (
               <Button variant="outline" onClick={undo}>
                 <Undo2Icon aria-hidden="true" />
@@ -422,9 +490,16 @@ export function SpotSwipeDeck({
                 spot={spot}
                 distanceMeters={
                   userLocation
-                    ? haversineDistanceMeters(userLocation.lat, userLocation.lng, spot.lat, spot.lng)
+                    ? haversineDistanceMeters(
+                        userLocation.lat,
+                        userLocation.lng,
+                        spot.lat,
+                        spot.lng,
+                      )
                     : null
                 }
+                filters={filters}
+                exploreParams={exploreParams}
                 onResolved={resolveTop}
                 isTop={i === 0}
               />
@@ -437,7 +512,9 @@ export function SpotSwipeDeck({
         <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
           <div
             className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-            style={{ width: `${((totalCount - deck.length) / totalCount) * 100}%` }}
+            style={{
+              width: `${((totalCount - deck.length) / totalCount) * 100}%`,
+            }}
           />
         </div>
         <p className="text-xs text-muted-foreground">
