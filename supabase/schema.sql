@@ -130,7 +130,16 @@ create or replace function spot_density_grid(
   max_lat double precision,
   min_lng double precision,
   max_lng double precision,
-  grid_size double precision default 0.05
+  grid_size double precision default 0.05,
+  -- Optional: restricts counted spots to this category set. Added so the
+  -- density view can count only 'park'/'garden'/'tree'/'birdwatching' (the
+  -- categories fetchSpotDensity in queries.ts actually passes) instead of
+  -- every verified spot regardless of category — this RPC's original form
+  -- counted 'abandoned'/'hangout' rows too, which aren't green space, and
+  -- 'other'/'climbing' rows the density view can't defend as green space
+  -- either. Null (the default) keeps this RPC's original all-categories
+  -- behavior for any other caller.
+  categories text[] default null
 )
 returns table (lat double precision, lng double precision, count bigint)
 language plpgsql
@@ -168,6 +177,7 @@ begin
       -- the last successful markers-mode count).
       and spots.lat between min_lat and max_lat
       and spots.lng between min_lng and max_lng
+      and (categories is null or spots.category = any(categories))
     group by 1, 2
     limit 20000;
 end;

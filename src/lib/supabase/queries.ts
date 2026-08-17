@@ -347,9 +347,26 @@ export type DensityBucket = {
 
 const DEFAULT_DENSITY_GRID_SIZE = 0.05;
 
+// What the density view is willing to call "green space." Deliberately
+// narrower than SELECTABLE_CATEGORIES: 'abandoned'/'hangout' are this app's
+// separate niche-place-discovery categories, not green space, by definition
+// — counting them here would make the density view's implicit claim
+// ("here's where green space is") measurably false. 'climbing' (often an
+// indoor gym) and 'other' (unverifiable catch-all) are excluded for the same
+// reason. This is an editorial decision about what the *density view*
+// specifically claims, not a general-purpose category filter — nothing else
+// in the app should import this constant.
+const GREEN_SPACE_CATEGORIES: SpotCategory[] = [
+  "park",
+  "garden",
+  "tree",
+  "birdwatching",
+];
+
 // Zoomed-out map views: bucketed counts instead of individual spots, via the
 // spot_density_grid RPC (schema.sql) so payload size stays bounded by grid
-// resolution rather than by how many spots are in the table.
+// resolution rather than by how many spots are in the table. Restricted to
+// GREEN_SPACE_CATEGORIES — see that constant's comment.
 export async function fetchSpotDensity(
   supabase: SupabaseClient,
   bounds: BoundingBox,
@@ -361,6 +378,7 @@ export async function fetchSpotDensity(
     min_lng: bounds.minLng,
     max_lng: bounds.maxLng,
     grid_size: gridSize,
+    categories: GREEN_SPACE_CATEGORIES,
   });
 
   if (error) throw new Error(error.message);
