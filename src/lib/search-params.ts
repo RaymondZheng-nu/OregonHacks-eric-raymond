@@ -2,7 +2,7 @@ import type { SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
 import { boundingBox, clampRadiusMeters, isValidLatLng, type BoundingBox } from "@/lib/geo";
 
-// Shared by /explore and /results — both pages read the same querystring
+// Shared by /explore and /swipe — both pages read the same querystring
 // shape the quiz produces (cats/activity/picnic/lat/lng/radius), so parsing
 // lived in one place only from the start; this file just gives it a name
 // once a second page needed it too.
