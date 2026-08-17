@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, MapPinIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +26,10 @@ import {
 import { submitSpot } from "@/lib/supabase/queries.client";
 import { uploadSpotPhoto } from "@/lib/supabase/storage";
 import { CATEGORY_OPTIONS } from "@/lib/categories";
+import { resolveLocationInput, type LatLng } from "@/lib/geocode";
 import type { SpotCategory } from "@/lib/types";
+
+const MY_LOCATION_LABEL = "My current location";
 
 export function AddSpotDialog({
   onSubmitted,
@@ -41,18 +44,51 @@ export function AddSpotDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<SpotCategory>("other");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
+  const [locationInput, setLocationInput] = useState("");
+  // Cleared whenever locationInput changes, so a stale resolution never gets
+  // silently submitted for text the user has since edited.
+  const [resolvedLocation, setResolvedLocation] = useState<LatLng | null>(null);
+  const [locating, setLocating] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<{ name?: string; location?: string }>({});
+
+  function handleLocationInputChange(value: string) {
+    setLocationInput(value);
+    setResolvedLocation(null);
+    if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
+  }
+
+  async function locateFromInput() {
+    if (!locationInput.trim() || locating) return;
+    setLocating(true);
+    try {
+      const result = await resolveLocationInput(locationInput);
+      if (result) {
+        setResolvedLocation(result);
+        setErrors((prev) => ({ ...prev, location: undefined }));
+      } else {
+        toast.error(
+          "Couldn't find that location — try a full address, or paste a Google Maps link"
+        );
+      }
+    } catch {
+      toast.error("Couldn't find that location — try again");
+    } finally {
+      setLocating(false);
+    }
+  }
 
   function useMyLocation() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLat(pos.coords.latitude.toFixed(6));
-        setLng(pos.coords.longitude.toFixed(6));
+        setResolvedLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocationInput(MY_LOCATION_LABEL);
+        if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
       },
-      () => toast.error("Couldn't get your location — enter coordinates manually")
+      () =>
+        toast.error(
+          "Couldn't get your location — enter an address or paste a Google Maps link instead"
+        )
     );
   }
 
@@ -61,9 +97,23 @@ export function AddSpotDialog({
 
     const nextErrors: { name?: string; location?: string } = {};
     if (!name.trim()) nextErrors.name = "Give this spot a name";
-    if (!lat || !lng) nextErrors.location = "Add coordinates or use your location";
+
+    // Submitting straight from a typed address (without clicking "Locate"
+    // first) is a real path, not just a fallback — resolve it here instead
+    // of forcing an extra click before every submission.
+    let location = resolvedLocation;
+    if (!location && locationInput.trim()) {
+      setLocating(true);
+      location = await resolveLocationInput(locationInput).catch(() => null);
+      setLocating(false);
+      if (location) setResolvedLocation(location);
+    }
+    if (!location) {
+      nextErrors.location =
+        "Add a location — paste a Google Maps link, an address, or use your location";
+    }
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0 || !location) return;
 
     setSubmitting(true);
 
@@ -77,8 +127,8 @@ export function AddSpotDialog({
         name,
         description: description || null,
         category,
-        lat: parseFloat(lat),
-        lng: parseFloat(lng),
+        lat: location.lat,
+        lng: location.lng,
         photo_url: photoUrl,
       });
 
@@ -86,8 +136,8 @@ export function AddSpotDialog({
       setOpen(false);
       setName("");
       setDescription("");
-      setLat("");
-      setLng("");
+      setLocationInput("");
+      setResolvedLocation(null);
       setPhotoFile(null);
       setCategory("other");
       setErrors({});
@@ -165,34 +215,38 @@ export function AddSpotDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Location</Label>
+            <Label htmlFor="location">Location</Label>
             <div className="flex gap-2">
               <Input
-                aria-label="Latitude"
-                value={lat}
-                onChange={(e) => {
-                  setLat(e.target.value);
-                  if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
-                }}
-                placeholder="Latitude"
+                id="location"
+                value={locationInput}
+                onChange={(e) => handleLocationInputChange(e.target.value)}
+                placeholder="Paste a Google Maps link, an address, or coordinates"
                 aria-invalid={!!errors.location}
-                required
               />
-              <Input
-                aria-label="Longitude"
-                value={lng}
-                onChange={(e) => {
-                  setLng(e.target.value);
-                  if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
-                }}
-                placeholder="Longitude"
-                aria-invalid={!!errors.location}
-                required
-              />
-              <Button type="button" variant="outline" onClick={useMyLocation}>
-                Use my location
+              <Button
+                type="button"
+                variant="outline"
+                onClick={locateFromInput}
+                disabled={locating || !locationInput.trim()}
+              >
+                {locating ? "Locating…" : "Locate"}
               </Button>
             </div>
+            <button
+              type="button"
+              onClick={useMyLocation}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <MapPinIcon aria-hidden="true" className="size-3.5" />
+              Use my current location instead
+            </button>
+            {resolvedLocation && (
+              <p className="text-xs text-muted-foreground">
+                📍 Located at {resolvedLocation.lat.toFixed(5)},{" "}
+                {resolvedLocation.lng.toFixed(5)}
+              </p>
+            )}
             {errors.location && (
               <p className="text-xs text-destructive">{errors.location}</p>
             )}

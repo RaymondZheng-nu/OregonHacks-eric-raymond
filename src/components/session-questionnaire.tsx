@@ -20,6 +20,7 @@ import { SwipeModal } from "@/components/swipe-modal";
 import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
 import { VIBE_OPTIONS } from "@/lib/vibes";
 import { clampRadiusMeters } from "@/lib/geo";
+import { geocodeAddress } from "@/lib/geocode";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
 
@@ -55,28 +56,6 @@ const DEFAULT_MINUTES = "15";
 function minutesToRadiusMeters(minutes: number, mode: TransportMode): number {
   const metersPerMinute = (MODE_SPEED_KMH[mode] * 1000) / 60;
   return Math.round(minutes * metersPerMinute);
-}
-
-async function geocodeAddress(
-  address: string,
-): Promise<{ lat: number; lng: number } | null> {
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.searchParams.set("q", address);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("limit", "1");
-  // Bare zip codes are ambiguous across countries (e.g. "10001" is also a
-  // real postcode in Algeria) — without this, Nominatim's global ranking can
-  // put a same-numbered foreign postcode ahead of the US one. This app only
-  // has spot data in the US, so restricting the search is always correct here.
-  url.searchParams.set("countrycodes", "us");
-
-  const res = await fetch(url.toString());
-  if (!res.ok) return null;
-
-  const results: { lat: string; lon: string }[] = await res.json();
-  if (results.length === 0) return null;
-
-  return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
 }
 
 // Dialog-wrapped questionnaire — same trigger/API shape as the old
