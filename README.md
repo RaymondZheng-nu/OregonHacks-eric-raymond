@@ -3,13 +3,18 @@
 Built for OregonHacks 2026.
 theme: *build tech that helps people connect with nature or supports environmental health*.
 
+**Live:** https://oregon-hacks-eric-raymond.vercel.app
+
 For apartment-dwellers across the USA with no yard, "go outside" isn't always obvious. TOUCH GRASS is a map that combines official city green-space data with spots the community has actually found worth visiting — parks, quiet gardens, birdwatching corners, even outdoor climbing spots — so finding a piece of nature nearby takes one look, not a search.
 
 ## Features
 
-- Interactive map of green space across the USA, seeded from official park/street-tree data
-- Community-submitted "niche" spots: hidden gardens, climbing spots, birdwatching corners, tagged by category, with photos and descriptions
+- Zoomed-out map shows green-space coverage across the USA, seeded from official park/street-tree data; zoom in for individual community spots
+- Quick onboarding questionnaire (categories, "vibe", travel mode + radius) that swipes you through matching nearby spots, Tinder-style
+- Community-submitted "niche" spots — hidden gardens, climbing spots, birdwatching corners — tagged by category, with photos and descriptions
 - One-click "add a spot" with geolocation, no account required
+- Community confirm/flag review queue for newly submitted spots before they go public
+- Save spots to a personal list, light/dark theme
 
 ## Tech stack
 
