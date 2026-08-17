@@ -9,6 +9,7 @@ import {
   TileLayer,
   Marker,
   Popup,
+  Rectangle,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -17,6 +18,7 @@ import L from "leaflet";
 import type { Spot, SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
 import type { BoundingBox } from "@/lib/geo";
+import { COVERAGE_REGIONS } from "@/lib/coverage-regions";
 import {
   getVerifiedSpotsInBounds,
   getSpotDensity,
@@ -125,6 +127,33 @@ function loadHeatPlugin(): Promise<unknown> {
   return heatPluginPromise;
 }
 
+// leaflet.heat normalizes each point's weight against `max` (default 1.0)
+// to pick a gradient stop. Real per-bucket green-space counts are routinely
+// well above 1 (sampled live against the actual RPC: Portland's buckets
+// range up to ~70, NYC's up to ~190, with most falling between 10-55) — left
+// at the default, nearly every populated bucket saturates to the same
+// "hottest" color, erasing the sparse-vs-dense gradient this view exists to
+// show. Set closer to the observed p75-p90 range so the visible gradient
+// spans most real buckets; the rare higher-count outlier (e.g. a single
+// dense downtown cluster) still clips to "hottest," which is the correct
+// reading for it. Re-check this against real numbers once the RPC's
+// category filter (queries.ts's GREEN_SPACE_CATEGORIES) is live — it will
+// shift these counts down somewhat, more so in Portland than NYC.
+const HEATMAP_MAX_INTENSITY = 40;
+
+// Green, not leaflet.heat's default blue-to-red "heat" ramp — this reads as
+// "more known green space," not "more danger/activity." The lowest stop
+// isn't fully transparent (unlike the library default, which hides any
+// point below ~40% of max) — a real but sparse bucket should still read as
+// "we found something here," not fade into the basemap and look identical
+// to a cell with zero data.
+const HEATMAP_GRADIENT: Record<number, string> = {
+  0.15: "#bbf7d0",
+  0.4: "#4ade80",
+  0.65: "#16a34a",
+  1: "#14532d",
+};
+
 // No official react-leaflet binding for leaflet.heat exists, so this
 // imperatively creates/tears down an L.heatLayer via useMap().
 function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
@@ -151,6 +180,8 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
       radius: 22,
       blur: 28,
       maxZoom: HEATMAP_ZOOM_THRESHOLD,
+      max: HEATMAP_MAX_INTENSITY,
+      gradient: HEATMAP_GRADIENT,
     });
     layer.addTo(map);
     return () => {
@@ -392,7 +423,31 @@ export function SpotMap({
           })}
         </MarkerClusterGroup>
       ) : (
-        <HeatmapLayer points={densityPoints} />
+        <>
+          {/* Dashed outline, not a filled claim — this is the only honest
+              signal of "trust this area's reading" the UI has, since there's
+              no schema column marking which rows were deduped/cleaned (see
+              coverage-regions.ts). Heat renders everywhere regardless (so
+              panning across the boundary doesn't look broken), but only
+              inside these outlines does explore-view.tsx's legend apply. */}
+          {COVERAGE_REGIONS.map((region) => (
+            <Rectangle
+              key={region.name}
+              bounds={[
+                [region.bounds.minLat, region.bounds.minLng],
+                [region.bounds.maxLat, region.bounds.maxLng],
+              ]}
+              pathOptions={{
+                color: "#16a34a",
+                weight: 1,
+                fillOpacity: 0.03,
+                dashArray: "4 4",
+              }}
+              interactive={false}
+            />
+          ))}
+          <HeatmapLayer points={densityPoints} />
+        </>
       )}
     </MapContainer>
   );
