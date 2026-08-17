@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { FeaturedSpotlight } from "@/components/featured-spotlight";
+import { SavedButton } from "@/components/saved-button";
 import { SpotlightCarousel } from "@/components/spotlight-carousel";
 import { SessionQuestionnaire } from "@/components/session-questionnaire";
 import { StickyMobileCta } from "@/components/sticky-mobile-cta";
@@ -74,6 +75,7 @@ export default async function LandingPage() {
                 </Link>
               }
             />
+            <SavedButton triggerSize="sm" />
             <AddSpotDialog triggerSize="sm" />
             <ThemeToggle />
           </div>

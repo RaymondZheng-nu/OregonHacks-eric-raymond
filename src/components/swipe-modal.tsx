@@ -3,12 +3,8 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SpotSwipeDeck } from "@/components/spot-swipe-deck";
-import {
-  boundsFromSearch,
-  buildExploreParams,
-  parseSearchParams,
-} from "@/lib/search-params";
-import { shuffle } from "@/lib/utils";
+import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
+import { shuffleWithPhotosFirst } from "@/lib/utils";
 import {
   getVerifiedSpotsInBounds,
   getVerifiedSpotsNationwide,
@@ -23,7 +19,6 @@ const POOL_LIMIT = 40;
 type DeckData = {
   spots: Spot[];
   userLocation?: { lat: number; lng: number };
-  exploreParams: string;
 };
 
 // Card-styled modal over whatever page the quiz was opened from (today,
@@ -62,29 +57,30 @@ export function SwipeModal({
           categories: parsed.categories ?? undefined,
           activity: parsed.activity,
           picnic: parsed.picnic,
+          photosFirst: true,
         });
         // Unlike the nationwide fetch below, the bounds query returns DB
         // order — shuffle it so the deck isn't just the newest-ingested
-        // spots in a row. Safe to shuffle client-side here (unlike
-        // utils.ts's shuffle doc warning about hydration mismatches): this
-        // component never renders server-side, so there's no SSR order to
-        // mismatch against.
-        spots = shuffle(pool);
+        // spots in a row. shuffleWithPhotosFirst, not a flat shuffle: the
+        // query above already weighted photo-having rows into this pool via
+        // photosFirst, and a flat shuffle would immediately undo that by
+        // remixing them back in with everything else. Safe to shuffle
+        // client-side here (unlike utils.ts's shuffle doc warning about
+        // hydration mismatches): this component never renders server-side,
+        // so there's no SSR order to mismatch against.
+        spots = shuffleWithPhotosFirst(pool);
       } else {
         spots = await getVerifiedSpotsNationwide({
           limit: POOL_LIMIT,
           categories: parsed.categories ?? undefined,
           activity: parsed.activity,
           picnic: parsed.picnic,
+          photosFirst: true,
         });
       }
 
       if (cancelled) return;
-      setData({
-        spots,
-        userLocation,
-        exploreParams: buildExploreParams(parsed).toString(),
-      });
+      setData({ spots, userLocation });
     }
 
     load().catch((error) => {
@@ -113,7 +109,6 @@ export function SwipeModal({
               activity: parsed.activity,
               picnic: parsed.picnic,
             }}
-            exploreParams={data.exploreParams}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8">

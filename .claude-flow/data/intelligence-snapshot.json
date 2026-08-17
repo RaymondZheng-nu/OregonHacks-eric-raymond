@@ -1,0 +1,904 @@
+[
+  {
+    "timestamp": 1786840119442,
+    "nodes": 14,
+    "edges": 78,
+    "pageRankSum": 1,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1786840119436-hz6r",
+        "summary": "Frequently edited: page.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.26680788645407133,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-4qub",
+        "summary": "Frequently edited: featured-spotlight.tsx (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.1442204738265977,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-m29w",
+        "summary": "Frequently edited: dropdown-menu.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.10120736648654739,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-yovo",
+        "summary": "Frequently edited: add-spot-dialog.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.07886289815789452,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-mpc3",
+        "summary": "Frequently edited: spot-map.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.06504157671557678,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-9nth",
+        "summary": "Frequently edited: queries.ts (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.05559109889527758,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-q2yv",
+        "summary": "Frequently edited: ingest-osm-cities.mjs (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.04869293830753825,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-zqts",
+        "summary": "Frequently edited: explore-view.tsx (21x)",
+        "confidence": 0.5,
+        "pageRank": 0.043420457515995436,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-qcq0",
+        "summary": "Frequently edited: page.tsx (7x)",
+        "confidence": 0.5,
+        "pageRank": 0.03925013262298668,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-bhk3",
+        "summary": "Frequently edited: layout.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.03586306584712829,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1786900413071,
+    "nodes": 17,
+    "edges": 120,
+    "pageRankSum": 0.9999999999999999,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1786900413066-ve09",
+        "summary": "Frequently edited: cookie-banner.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.24898380491952263,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786900413066-fwof",
+        "summary": "Frequently edited: page.tsx (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.13458584315231986,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786900413066-dmrw",
+        "summary": "Frequently edited: start-session-dialog.tsx (11x)",
+        "confidence": 0.5,
+        "pageRank": 0.09444622034978646,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-hz6r",
+        "summary": "Frequently edited: page.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.07359446956029869,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-4qub",
+        "summary": "Frequently edited: featured-spotlight.tsx (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.060696478386159845,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-m29w",
+        "summary": "Frequently edited: dropdown-menu.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.051877337786226226,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-yovo",
+        "summary": "Frequently edited: add-spot-dialog.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.04544000767398229,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-mpc3",
+        "summary": "Frequently edited: spot-map.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.04051975437024939,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-9nth",
+        "summary": "Frequently edited: queries.ts (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.03662802781216275,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-q2yv",
+        "summary": "Frequently edited: ingest-osm-cities.mjs (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.03346723406057497,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1786900586442,
+    "nodes": 17,
+    "edges": 120,
+    "pageRankSum": 0.9999999999999999,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1786900413066-ve09",
+        "summary": "Frequently edited: cookie-banner.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.24898380491952263,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786900413066-fwof",
+        "summary": "Frequently edited: page.tsx (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.13458584315231986,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786900413066-dmrw",
+        "summary": "Frequently edited: start-session-dialog.tsx (11x)",
+        "confidence": 0.5,
+        "pageRank": 0.09444622034978646,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-hz6r",
+        "summary": "Frequently edited: page.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.07359446956029869,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-4qub",
+        "summary": "Frequently edited: featured-spotlight.tsx (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.060696478386159845,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-m29w",
+        "summary": "Frequently edited: dropdown-menu.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.051877337786226226,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-yovo",
+        "summary": "Frequently edited: add-spot-dialog.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.04544000767398229,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-mpc3",
+        "summary": "Frequently edited: spot-map.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.04051975437024939,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-9nth",
+        "summary": "Frequently edited: queries.ts (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.03662802781216275,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786840119436-q2yv",
+        "summary": "Frequently edited: ingest-osm-cities.mjs (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.03346723406057497,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1786920820555,
+    "nodes": 27,
+    "edges": 325,
+    "pageRankSum": 1,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1786920820550-wov0",
+        "summary": "Frequently edited: dedup-cleanup.mjs (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.21299667310716275,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-yuyw",
+        "summary": "Frequently edited: handoff.md (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.11513333244578217,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-rb2y",
+        "summary": "Frequently edited: page.tsx (6x)",
+        "confidence": 0.5,
+        "pageRank": 0.08079532974585676,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-ihgy",
+        "summary": "Frequently edited: spot-swipe-deck.tsx (20x)",
+        "confidence": 0.5,
+        "pageRank": 0.06295740837593301,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-cy9x",
+        "summary": "Frequently edited: saved-spots.ts (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.0519236425563604,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-gwjg",
+        "summary": "Frequently edited: page.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.044379186767123845,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-25w7",
+        "summary": "Frequently edited: apply-dedup-results.mjs (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.03887228413804729,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-e5w7",
+        "summary": "Frequently edited: backfill-climbing-grade.mjs (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.03466318605070959,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-hra9",
+        "summary": "Frequently edited: session-questionnaire.tsx (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.03133395547187285,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-xb2y",
+        "summary": "Frequently edited: queries.server.ts (6x)",
+        "confidence": 0.5,
+        "pageRank": 0.028630011481553076,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1786920832869,
+    "nodes": 27,
+    "edges": 325,
+    "pageRankSum": 1,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1786920820550-wov0",
+        "summary": "Frequently edited: dedup-cleanup.mjs (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.21299667310716275,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-yuyw",
+        "summary": "Frequently edited: handoff.md (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.11513333244578217,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-rb2y",
+        "summary": "Frequently edited: page.tsx (6x)",
+        "confidence": 0.5,
+        "pageRank": 0.08079532974585676,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-ihgy",
+        "summary": "Frequently edited: spot-swipe-deck.tsx (20x)",
+        "confidence": 0.5,
+        "pageRank": 0.06295740837593301,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-cy9x",
+        "summary": "Frequently edited: saved-spots.ts (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.0519236425563604,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-gwjg",
+        "summary": "Frequently edited: page.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.044379186767123845,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-25w7",
+        "summary": "Frequently edited: apply-dedup-results.mjs (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.03887228413804729,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-e5w7",
+        "summary": "Frequently edited: backfill-climbing-grade.mjs (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.03466318605070959,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-hra9",
+        "summary": "Frequently edited: session-questionnaire.tsx (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.03133395547187285,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-xb2y",
+        "summary": "Frequently edited: queries.server.ts (6x)",
+        "confidence": 0.5,
+        "pageRank": 0.028630011481553076,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1786939248262,
+    "nodes": 31,
+    "edges": 435,
+    "pageRankSum": 1,
+    "confidences": [
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.495,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1786939248257-lplb",
+        "summary": "Frequently edited: spotlight-carousel.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.20374071445028624,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786939248257-g9kl",
+        "summary": "Frequently edited: ingest-socrata.mjs (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.11013006707104712,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786939248257-51pj",
+        "summary": "Frequently edited: search-params.ts (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.07728424925446872,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786939248257-dk91",
+        "summary": "Frequently edited: schema.sql (7x)",
+        "confidence": 0.5,
+        "pageRank": 0.06022149475694418,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-wov0",
+        "summary": "Frequently edited: dedup-cleanup.mjs (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.0496672167141524,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-yuyw",
+        "summary": "Frequently edited: handoff.md (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.042450617548488404,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-rb2y",
+        "summary": "Frequently edited: page.tsx (6x)",
+        "confidence": 0.5,
+        "pageRank": 0.03718302732388103,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-ihgy",
+        "summary": "Frequently edited: spot-swipe-deck.tsx (20x)",
+        "confidence": 0.5,
+        "pageRank": 0.03315684376498955,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-cy9x",
+        "summary": "Frequently edited: saved-spots.ts (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.029972291691659284,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-gwjg",
+        "summary": "Frequently edited: page.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.02738585328785467,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1786939249777,
+    "nodes": 31,
+    "edges": 435,
+    "pageRankSum": 1,
+    "confidences": [
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.49,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1786939248257-lplb",
+        "summary": "Frequently edited: spotlight-carousel.tsx (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.20374071445028624,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786939248257-g9kl",
+        "summary": "Frequently edited: ingest-socrata.mjs (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.11013006707104712,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786939248257-51pj",
+        "summary": "Frequently edited: search-params.ts (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.07728424925446872,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786939248257-dk91",
+        "summary": "Frequently edited: schema.sql (7x)",
+        "confidence": 0.5,
+        "pageRank": 0.06022149475694418,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-wov0",
+        "summary": "Frequently edited: dedup-cleanup.mjs (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.0496672167141524,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-yuyw",
+        "summary": "Frequently edited: handoff.md (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.042450617548488404,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-rb2y",
+        "summary": "Frequently edited: page.tsx (6x)",
+        "confidence": 0.5,
+        "pageRank": 0.03718302732388103,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-ihgy",
+        "summary": "Frequently edited: spot-swipe-deck.tsx (20x)",
+        "confidence": 0.5,
+        "pageRank": 0.03315684376498955,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-cy9x",
+        "summary": "Frequently edited: saved-spots.ts (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.029972291691659284,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1786920820550-gwjg",
+        "summary": "Frequently edited: page.tsx (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.02738585328785467,
+        "accessCount": 0
+      }
+    ]
+  }
+]

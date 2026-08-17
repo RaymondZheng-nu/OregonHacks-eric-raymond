@@ -6,6 +6,7 @@ import {
   isValidLatLng,
   type BoundingBox,
 } from "@/lib/geo";
+import { shuffle, shuffleWithPhotosFirst } from "@/lib/utils";
 
 // Reads soft-fail to empty defaults (matches the `data ?? []` pattern the call
 // sites used before this module existed) so a page never crashes on a blip.
@@ -141,6 +142,14 @@ export type SpotsInBoundsOptions = {
   // a picnic. Picnic-worthiness isn't its own activity_fit tag; `size_class`
   // medium/large is the real, already-computed signal for "has an open area."
   picnic?: boolean;
+  // Swipe-deck-only: the caller slices this result down to a small on-screen
+  // batch, so ordering matters — spots with a real photo_url are surfaced
+  // before photo-less ones (see spot-swipe-deck.tsx's fallback map preview),
+  // otherwise a random 40-row slice comes back almost entirely photo-less by
+  // pure chance (~1.3% of verified spots have a real photo). Never excludes
+  // photo-less matches, just orders them after photo-having ones, so a
+  // narrow filter with few/no photo matches still fills out to `limit`.
+  photosFirst?: boolean;
 };
 
 const DEFAULT_BOUNDS_LIMIT = 1000;
@@ -175,6 +184,7 @@ export async function fetchVerifiedSpotsInBounds(
     climbingGrades,
     activity,
     picnic,
+    photosFirst,
   } = options;
   // Defense-in-depth on this function's own contract, not just its one
   // real caller: `minParkAreaM2?: number` doesn't rule out NaN/Infinity,
@@ -208,11 +218,16 @@ export async function fetchVerifiedSpotsInBounds(
     .lte("lat", bounds.maxLat)
     .gte("lng", bounds.minLng)
     .lte("lng", bounds.maxLng)
-    .order("created_at", { ascending: false })
-    .limit(limit)
     .or(
       `category.not.in.(${JUNK_FILTERED_CATEGORIES.join(",")}),area_m2.gte.${areaFloor},area_m2.is.null`,
     );
+
+  // Chained before the recency order below so it's the primary sort key,
+  // not a tiebreaker under it — see SpotsInBoundsOptions.photosFirst.
+  if (photosFirst) {
+    query = query.order("photo_url", { ascending: true, nullsFirst: false });
+  }
+  query = query.order("created_at", { ascending: false }).limit(limit);
 
   if (categories) {
     query = query.in("category", categories);
@@ -269,10 +284,12 @@ const DEFAULT_NATIONWIDE_SAMPLE_SIZE = 150;
 const NATIONWIDE_RAW_POOL_SIZE = 25_000;
 
 // No-bounds counterpart to fetchVerifiedSpotsInBounds, for when there's no
-// location context to scope a viewport to (e.g. the questionnaire's address
-// field was skipped — see session-questionnaire.tsx's "browse spots across
-// the whole country" copy, which this makes literally true instead of
-// silently falling back to a single city's radius).
+// location context to scope a viewport to at all. The quiz itself no longer
+// reaches this — skipping its address step now defaults to a Portland-scoped
+// bounds search (session-questionnaire.tsx's PORTLAND_COORDS) rather than a
+// true nationwide sample, since the dedup/junk-cleanup pass was only ever
+// run against Portland metro and NYC data. This stays reachable for a direct
+// /swipe or /explore visit with no lat/lng in the URL at all.
 export async function fetchVerifiedSpotsNationwide(
   supabase: SupabaseClient,
   options: SpotsInBoundsOptions = {},
@@ -287,6 +304,7 @@ export async function fetchVerifiedSpotsNationwide(
     climbingGrades,
     activity,
     picnic,
+    photosFirst,
   } = options;
   // Defense-in-depth on this function's own contract, not just its one
   // real caller: `minParkAreaM2?: number` doesn't rule out NaN/Infinity,
@@ -348,13 +366,16 @@ export async function fetchVerifiedSpotsNationwide(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  // Fisher-Yates, not .sort(() => Math.random() - 0.5) — the sort-comparator
-  // trick is a biased shuffle (V8's sort isn't a fair coin flip per pair).
-  const pool = (data ?? []) as Spot[];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
+  const rawPool = (data ?? []) as Spot[];
+
+  // photosFirst keeps photo-having rows ahead of photo-less ones (each group
+  // independently randomized) instead of one flat shuffle — otherwise a
+  // photo spot has to win a ~1-in-75 coin flip against a photo-less one for
+  // an early slot (~1.3% of verified spots have a real photo). Fisher-Yates
+  // under the hood either way, not .sort(() => Math.random() - 0.5) — the
+  // sort-comparator trick is a biased shuffle (V8's sort isn't a fair coin
+  // flip per pair).
+  const pool = photosFirst ? shuffleWithPhotosFirst(rawPool) : shuffle(rawPool);
 
   return pool.slice(0, limit);
 }
@@ -367,9 +388,26 @@ export type DensityBucket = {
 
 const DEFAULT_DENSITY_GRID_SIZE = 0.05;
 
+// What the density view is willing to call "green space." Deliberately
+// narrower than SELECTABLE_CATEGORIES: 'abandoned'/'hangout' are this app's
+// separate niche-place-discovery categories, not green space, by definition
+// — counting them here would make the density view's implicit claim
+// ("here's where green space is") measurably false. 'climbing' (often an
+// indoor gym) and 'other' (unverifiable catch-all) are excluded for the same
+// reason. This is an editorial decision about what the *density view*
+// specifically claims, not a general-purpose category filter — nothing else
+// in the app should import this constant.
+const GREEN_SPACE_CATEGORIES: SpotCategory[] = [
+  "park",
+  "garden",
+  "tree",
+  "birdwatching",
+];
+
 // Zoomed-out map views: bucketed counts instead of individual spots, via the
 // spot_density_grid RPC (schema.sql) so payload size stays bounded by grid
-// resolution rather than by how many spots are in the table.
+// resolution rather than by how many spots are in the table. Restricted to
+// GREEN_SPACE_CATEGORIES — see that constant's comment.
 export async function fetchSpotDensity(
   supabase: SupabaseClient,
   bounds: BoundingBox,
@@ -381,6 +419,7 @@ export async function fetchSpotDensity(
     min_lng: bounds.minLng,
     max_lng: bounds.maxLng,
     grid_size: gridSize,
+    categories: GREEN_SPACE_CATEGORIES,
   });
 
   if (error) throw new Error(error.message);

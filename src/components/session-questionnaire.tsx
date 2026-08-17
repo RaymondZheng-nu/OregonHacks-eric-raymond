@@ -20,6 +20,8 @@ import { SwipeModal } from "@/components/swipe-modal";
 import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
 import { VIBE_OPTIONS } from "@/lib/vibes";
 import { clampRadiusMeters } from "@/lib/geo";
+import { geocodeAddress } from "@/lib/geocode";
+import { PORTLAND_CENTER } from "@/lib/search-params";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
 
@@ -55,28 +57,6 @@ const DEFAULT_MINUTES = "15";
 function minutesToRadiusMeters(minutes: number, mode: TransportMode): number {
   const metersPerMinute = (MODE_SPEED_KMH[mode] * 1000) / 60;
   return Math.round(minutes * metersPerMinute);
-}
-
-async function geocodeAddress(
-  address: string,
-): Promise<{ lat: number; lng: number } | null> {
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.searchParams.set("q", address);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("limit", "1");
-  // Bare zip codes are ambiguous across countries (e.g. "10001" is also a
-  // real postcode in Algeria) — without this, Nominatim's global ranking can
-  // put a same-numbered foreign postcode ahead of the US one. This app only
-  // has spot data in the US, so restricting the search is always correct here.
-  url.searchParams.set("countrycodes", "us");
-
-  const res = await fetch(url.toString());
-  if (!res.ok) return null;
-
-  const results: { lat: string; lon: string }[] = await res.json();
-  if (results.length === 0) return null;
-
-  return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
 }
 
 // Dialog-wrapped questionnaire — same trigger/API shape as the old
@@ -231,6 +211,18 @@ export function SessionQuestionnaire({
           String(clampRadiusMeters(minutesToRadiusMeters(minutes, mode))),
         );
       }
+    } else {
+      // Not a nationwide sample: the dedup/junk-size cleanup pass has only
+      // ever been run against Portland metro and NYC data, and skipping
+      // this step is the fastest path through the quiz (likely the one
+      // most people actually take), so it can't risk surfacing uncleaned
+      // duplicates or sub-floor junk from everywhere else. Portland over
+      // NYC because this is OregonHacks. No radius set here on purpose —
+      // boundsFromSearch's own default (DEFAULT_VIEWPORT_RADIUS_METERS,
+      // ~25km) applies, the same scoping radius every other no-radius
+      // search already gets.
+      params.set("lat", String(PORTLAND_CENTER.lat));
+      params.set("lng", String(PORTLAND_CENTER.lng));
     }
 
     setOpen(false);
@@ -407,8 +399,8 @@ export function SessionQuestionnaire({
                       </p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        Optional. Skip this to browse spots across the whole
-                        country.
+                        Optional — skip this and we&apos;ll point you to
+                        spots around Portland.
                       </p>
                     )}
                   </div>
