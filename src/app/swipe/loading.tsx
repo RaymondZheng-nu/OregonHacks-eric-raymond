@@ -6,14 +6,14 @@ import { MapIcon } from "lucide-react";
 // card area below shows a loading placeholder.
 export default function SwipeLoading() {
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-accent">
+    <div className="flex h-[100dvh] w-full flex-col bg-background">
       <div className="flex w-full items-center justify-between border-b bg-background px-4 py-3 md:px-6">
         <Link
           href="/explore"
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <MapIcon aria-hidden="true" className="size-4" />
-          General map view
+          Map view
         </Link>
         <span className="font-logo text-sm tracking-tight text-green-700">
           TOUCH GRASS
