@@ -416,6 +416,17 @@ export async function fetchPendingCount(
   return count ?? 0;
 }
 
+export async function fetchVerifiedSpotCount(
+  supabase: SupabaseClient,
+): Promise<number> {
+  const { count } = await supabase
+    .from("spots")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "verified");
+
+  return count ?? 0;
+}
+
 // Generous enough to never bother a real submission, just enough to reject a
 // pasted document. Exported so add-spot-dialog.tsx validates the same limit.
 export const MAX_NAME_LENGTH = 200;

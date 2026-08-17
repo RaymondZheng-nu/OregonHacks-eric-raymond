@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   getFeaturedSpots,
   getPendingCount,
+  getVerifiedSpotCount,
 } from "@/lib/supabase/queries.server";
 
 // First CAROUSEL_COUNT feed the hero carousel, the rest fill the grid below.
@@ -26,9 +27,10 @@ export const metadata: Metadata = {
 };
 
 export default async function LandingPage() {
-  const [featured, pendingCount] = await Promise.all([
+  const [featured, pendingCount, spotCount] = await Promise.all([
     getFeaturedSpots(FEATURED_COUNT),
     getPendingCount(),
+    getVerifiedSpotCount(),
   ]);
   const carouselSpots = featured.slice(0, CAROUSEL_COUNT);
   const restFeatured = featured.slice(CAROUSEL_COUNT);
@@ -87,6 +89,11 @@ export default async function LandingPage() {
             outside out there. Real parks and quiet spots near you, from people
             who actually left the house to find them.
           </p>
+          {spotCount > 0 && (
+            <p className="mt-3 text-sm font-medium text-green-700">
+              {spotCount.toLocaleString()}+ real spots mapped nationwide
+            </p>
+          )}
           <div id="hero-cta" className="mt-8 flex flex-col items-start gap-4">
             <p className="text-sm font-medium text-muted-foreground">
               Feeling adventurous?

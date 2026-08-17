@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "upload.wikimedia.org" },
+      // Special:FilePath commons.wikimedia.org URLs (from OSM wikimedia_commons
+      // tags) 302-redirect to upload.wikimedia.org, but next/image validates the
+      // src hostname itself before following the redirect.
+      { protocol: "https", hostname: "commons.wikimedia.org" },
       { protocol: "https", hostname: "*.supabase.co" },
     ],
     // Every photo in this app is hotlinked straight to Wikimedia's origin —

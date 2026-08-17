@@ -312,6 +312,17 @@ const VISIBLE_STACK_DEPTH = 3;
 const INITIAL_REVEAL = 5;
 const REVEAL_STEP = 5;
 
+function KeyHint({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
+      {children}
+    </kbd>
+  );
+}
+
+// Full-width header bar. On mobile this collapses to the same three links,
+// tightly packed; the keyboard hints and explicit "Exit" only make sense once
+// there's a keyboard and room to show them, so those are md+ only.
 function SwipeNavBar({
   savedCount,
   onSavedCountChange,
@@ -322,31 +333,51 @@ function SwipeNavBar({
   const [showSaved, setShowSaved] = useState(false);
 
   return (
-    <div className="flex w-full max-w-sm items-center justify-between px-1 pt-2">
+    <div className="flex w-full items-center justify-between border-b bg-background px-4 py-3 md:px-6">
+      <div className="flex items-center gap-4">
+        <Link
+          href="/explore"
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <MapIcon aria-hidden="true" className="size-4" />
+          Map view
+        </Link>
+        <span className="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
+          <KeyHint>←</KeyHint> skip
+          <KeyHint>→</KeyHint> save
+          <KeyHint>Backspace</KeyHint> undo
+        </span>
+      </div>
       <Link
-        href="/explore"
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        href="/"
+        className="font-logo text-sm tracking-tight text-green-700 hover:opacity-90"
       >
-        <MapIcon aria-hidden="true" className="size-4" />
-        Map view
-      </Link>
-      <span className="font-logo text-sm tracking-tight text-green-700">
         TOUCH GRASS
-      </span>
-      {/* Popup, not a Link to /saved — same deck-unmount reasoning as above. */}
-      <button
-        type="button"
-        onClick={() => setShowSaved(true)}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <BookmarkIcon aria-hidden="true" className="size-4" />
-        Saved
-        {savedCount > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
-            {savedCount}
-          </span>
-        )}
-      </button>
+      </Link>
+      <div className="flex items-center gap-4">
+        {/* Popup, not a Link to /saved — same deck-unmount reasoning as above. */}
+        <button
+          type="button"
+          onClick={() => setShowSaved(true)}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <BookmarkIcon aria-hidden="true" className="size-4" />
+          Saved
+          {savedCount > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+              {savedCount}
+            </span>
+          )}
+        </button>
+        {/* Mobile keeps the fixed corner X in swipe/page.tsx instead. */}
+        <Link
+          href="/"
+          className="hidden items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground md:flex"
+        >
+          <XIcon aria-hidden="true" className="size-4" />
+          Exit
+        </Link>
+      </div>
       <SavedModal
         open={showSaved}
         onClose={() => {
@@ -501,9 +532,9 @@ export function SpotSwipeDeck({
 
   if (deck.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="flex h-full flex-col">
         <SwipeNavBar savedCount={savedCount} onSavedCountChange={refreshSavedCount} />
-        <div className="flex flex-1 flex-col items-center justify-center gap-2">
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
           {/* Empty history here means the pool started empty; any swipe appends. */}
           <p className="text-lg font-medium">
             {history.length === 0 ? "No spots match yet" : "That's every spot for now"}
@@ -535,9 +566,10 @@ export function SpotSwipeDeck({
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-4">
+    <div className="flex h-full flex-col">
       <SwipeNavBar savedCount={savedCount} onSavedCountChange={refreshSavedCount} />
 
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-4">
       <div className="relative aspect-3/4 w-full max-w-sm">
         <AnimatePresence>
           {deck.slice(0, VISIBLE_STACK_DEPTH).map((spot, i) => (
@@ -616,6 +648,7 @@ export function SpotSwipeDeck({
           <HeartIcon aria-hidden="true" className="size-6" />
         </Button>
         <div className="size-11" aria-hidden="true" />
+      </div>
       </div>
     </div>
   );

@@ -15,17 +15,20 @@ import {
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
-import type { Spot, SpotCategory } from "@/lib/types";
+import { TicketIcon } from "lucide-react";
+import type { FreeActivityTip, Spot, SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
 import { clampBoundsSpan, type BoundingBox } from "@/lib/geo";
 import { COVERAGE_REGIONS } from "@/lib/coverage-regions";
 import {
   getVerifiedSpotsInBounds,
   getSpotDensity,
+  getVerifiedTips,
 } from "@/lib/supabase/queries.client";
 import type { SpotsInBoundsOptions } from "@/lib/supabase/queries";
 import { getSpotVerdict } from "@/lib/spot-verdict";
 import { markerIcon } from "@/lib/leaflet-marker";
+import { SuggestTipDialog } from "@/components/suggest-tip-dialog";
 import { cn } from "@/lib/utils";
 
 export type AdvancedFilters = Pick<
@@ -188,6 +191,100 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
   }, [map, points, pluginReady]);
 
   return null;
+}
+
+// Tips are fetched lazily on popup open, not eagerly per marker — up to
+// VIEWPORT_FETCH_LIMIT markers can be mounted at once, and firing a tips
+// fetch for all of them on mount would spam the DB for popups nobody opens.
+function SpotMarker({
+  spot,
+  markerRefs,
+}: {
+  spot: Spot;
+  markerRefs: React.MutableRefObject<Map<string, L.Marker>>;
+}) {
+  const verdict = getSpotVerdict(spot);
+  const [tips, setTips] = useState<FreeActivityTip[]>([]);
+  const tipsFetchedRef = useRef(false);
+
+  return (
+    <Marker
+      position={[spot.lat, spot.lng]}
+      icon={markerIcon(CATEGORY_META[spot.category].color)}
+      // Leaflet marks the icon role="button" but gives it no name;
+      // `title` becomes its accessible name so pins aren't bare buttons.
+      title={spot.name}
+      ref={(instance) => {
+        if (instance) markerRefs.current.set(spot.id, instance);
+        else markerRefs.current.delete(spot.id);
+      }}
+      eventHandlers={{
+        popupopen: () => {
+          if (tipsFetchedRef.current) return;
+          tipsFetchedRef.current = true;
+          getVerifiedTips(spot.id).then(setTips);
+        },
+      }}
+    >
+      <Popup>
+        <div className="w-52 space-y-1.5">
+          {spot.photo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={spot.photo_url}
+              alt={spot.name}
+              className="h-24 w-full rounded object-cover"
+            />
+          )}
+          <p className="font-semibold leading-tight">{spot.name}</p>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{CATEGORY_META[spot.category].label}</span>
+            <span>·</span>
+            <span>
+              {spot.source === "official" ? "Open data" : "Community spot"}
+            </span>
+          </div>
+          {spot.description && (
+            <p className="text-xs">{spot.description}</p>
+          )}
+          {tips.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {tips.map((tip) => (
+                <span
+                  key={tip.id}
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
+                >
+                  <TicketIcon aria-hidden="true" className="size-3" />
+                  {tip.tip}
+                </span>
+              ))}
+            </div>
+          )}
+          <p
+            className={cn(
+              "text-xs",
+              verdict.tone === "caution"
+                ? "text-destructive"
+                : "text-muted-foreground",
+            )}
+          >
+            {verdict.label}
+          </p>
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-primary underline underline-offset-2"
+            >
+              Get directions
+            </a>
+            <SuggestTipDialog spotId={spot.id} />
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  );
 }
 
 export function SpotMap({
@@ -394,67 +491,9 @@ export function SpotMap({
         // main cause of map lag. Clustering keeps the DOM node count bounded.
         // At focusSpotId's forced zoom (16) the target pin is already separated.
         <MarkerClusterGroup chunkedLoading iconCreateFunction={clusterIcon}>
-          {visibleSpots.map((spot) => {
-            const verdict = getSpotVerdict(spot);
-            return (
-              <Marker
-                key={spot.id}
-                position={[spot.lat, spot.lng]}
-                icon={markerIcon(CATEGORY_META[spot.category].color)}
-                // Leaflet marks the icon role="button" but gives it no name;
-                // `title` becomes its accessible name so pins aren't bare buttons.
-                title={spot.name}
-                ref={(instance) => {
-                  if (instance) markerRefs.current.set(spot.id, instance);
-                  else markerRefs.current.delete(spot.id);
-                }}
-              >
-                <Popup>
-                  <div className="w-52 space-y-1.5">
-                    {spot.photo_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={spot.photo_url}
-                        alt={spot.name}
-                        className="h-24 w-full rounded object-cover"
-                      />
-                    )}
-                    <p className="font-semibold leading-tight">{spot.name}</p>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span>{CATEGORY_META[spot.category].label}</span>
-                      <span>·</span>
-                      <span>
-                        {spot.source === "official"
-                          ? "Open data"
-                          : "Community spot"}
-                      </span>
-                    </div>
-                    {spot.description && (
-                      <p className="text-xs">{spot.description}</p>
-                    )}
-                    <p
-                      className={cn(
-                        "text-xs",
-                        verdict.tone === "caution"
-                          ? "text-destructive"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {verdict.label}
-                    </p>
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block text-xs font-medium text-primary underline underline-offset-2"
-                    >
-                      Get directions
-                    </a>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+          {visibleSpots.map((spot) => (
+            <SpotMarker key={spot.id} spot={spot} markerRefs={markerRefs} />
+          ))}
         </MarkerClusterGroup>
       ) : (
         <>

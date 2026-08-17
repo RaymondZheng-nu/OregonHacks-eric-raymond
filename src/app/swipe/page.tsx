@@ -58,11 +58,12 @@ export default async function SwipePage({
 
   return (
     <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
+      {/* md+ gets an explicit "Exit" link in SwipeNavBar instead. */}
       <Button
         variant="ghost"
         size="icon-sm"
         nativeButton={false}
-        className="fixed top-3 right-3 z-[1200]"
+        className="fixed top-3 right-3 z-[1200] md:hidden"
         render={
           <Link href="/">
             <XIcon aria-hidden="true" />

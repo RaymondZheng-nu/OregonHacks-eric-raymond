@@ -7,6 +7,7 @@ import {
   fetchFeaturedSpots,
   fetchPendingSpots,
   fetchPendingCount,
+  fetchVerifiedSpotCount,
   fetchDistinctAmenities,
   fetchDistinctClimbingGrades,
   type SpotsInBoundsOptions,
@@ -42,6 +43,10 @@ export async function getPendingSpots() {
 
 export async function getPendingCount() {
   return fetchPendingCount(await createClient());
+}
+
+export async function getVerifiedSpotCount() {
+  return fetchVerifiedSpotCount(await createClient());
 }
 
 export async function getDistinctAmenities() {
