@@ -57,14 +57,14 @@ export function parseSearchParams(
   };
 }
 
-// Matches the map's own default center/zoom in spot-map.tsx (NYC, zoom 11)
-// so the first server-rendered paint already shows the right viewport
-// instead of fetching (and discarding) the whole table on every load.
-export const DEFAULT_CENTER = { lat: 40.7484, lng: -73.9857 };
 // Quiz's skip-address fallback (session-questionnaire.tsx) and the density
 // view's coverage-region boxes (lib/coverage-regions.ts) both anchor on
 // this same point, rather than each guessing their own "where is Portland."
 export const PORTLAND_CENTER = { lat: 45.5152, lng: -122.6784 };
+// Matches the map's own default center/zoom in spot-map.tsx (Portland, zoom
+// 11) so the first server-rendered paint already shows the right viewport
+// instead of fetching (and discarding) the whole table on every load.
+export const DEFAULT_CENTER = PORTLAND_CENTER;
 export const DEFAULT_VIEWPORT_RADIUS_METERS = 25_000;
 
 // A questionnaire-derived location narrows the initial SSR fetch to that

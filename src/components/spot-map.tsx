@@ -33,7 +33,7 @@ export type AdvancedFilters = Pick<
   "sizeClasses" | "amenities" | "wheelchairAccessibleOnly" | "climbingGrades"
 >;
 
-const NYC_CENTER: [number, number] = [40.7484, -73.9857];
+const PORTLAND_CENTER: [number, number] = [45.5152, -122.6784];
 const DEFAULT_ZOOM = 11;
 
 // Below this zoom, the viewport is wide enough (multi-city/state/country)
@@ -431,7 +431,7 @@ export function SpotMap({
 
   return (
     <MapContainer
-      center={initialCenter ?? NYC_CENTER}
+      center={initialCenter ?? PORTLAND_CENTER}
       zoom={focusSpotId ? 16 : initialCenter ? 13 : DEFAULT_ZOOM}
       scrollWheelZoom
       className="h-full w-full"
