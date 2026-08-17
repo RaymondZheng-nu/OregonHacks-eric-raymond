@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { BlobBackground } from "@/components/blob-background";
+import Link from "next/link";
+import { XIcon } from "lucide-react";
 import { SpotSwipeDeck } from "@/components/spot-swipe-deck";
+import { Button } from "@/components/ui/button";
 import {
   getVerifiedSpotsInBounds,
   getVerifiedSpotsNationwide,
@@ -72,8 +74,19 @@ export default async function SwipePage({
   }
 
   return (
-    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden">
-      <BlobBackground />
+    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        nativeButton={false}
+        className="fixed top-3 right-3 z-[1200]"
+        render={
+          <Link href="/">
+            <XIcon aria-hidden="true" />
+            <span className="sr-only">Exit swiping</span>
+          </Link>
+        }
+      />
       <SpotSwipeDeck
         spots={spots}
         userLocation={userLocation}

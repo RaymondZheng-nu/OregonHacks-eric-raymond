@@ -314,10 +314,10 @@ export function SpotSwipeDeck({
   const [deck, setDeck] = useState<Spot[]>(spots);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [savedCount, setSavedCount] = useState(0);
-  // Revealed-so-far count, not the full server pool size — grows by
-  // REVEAL_STEP each time "Generate more" is clicked, so the progress bar
-  // reads sensibly ("2 of 5", then "2 of 10") instead of jumping straight to
-  // the full pool size on the very first card.
+  // Size of the *current* batch, not the full server pool — "Generate more"
+  // resets this to the fresh batch size rather than accumulating, so the
+  // progress bar always reads "1 of 5" for a new batch instead of "6 of 10"
+  // carrying the old batch's count forward.
   const [totalCount, setTotalCount] = useState(spots.length);
   const [hasMoreInPool, setHasMoreInPool] = useState(false);
 
@@ -412,11 +412,14 @@ export function SpotSwipeDeck({
   // always [] here, but appending (not replacing) keeps this safe even if
   // that ever changes.
   function generateMore() {
+    // Only reachable from the empty-deck state, so this always replaces an
+    // empty deck with a fresh batch — never appends leftover cards from the
+    // batch that was just fully swiped through.
     const next = poolRef.current.slice(0, REVEAL_STEP);
     poolRef.current = poolRef.current.slice(REVEAL_STEP);
-    deckRef.current = [...deckRef.current, ...next];
-    setDeck(deckRef.current);
-    setTotalCount((c) => c + next.length);
+    deckRef.current = next;
+    setDeck(next);
+    setTotalCount(next.length);
     setHasMoreInPool(poolRef.current.length > 0);
   }
 
