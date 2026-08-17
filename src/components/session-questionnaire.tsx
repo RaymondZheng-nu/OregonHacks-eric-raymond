@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CompassIcon, Footprints, Bike, Car, TrainFront } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -30,10 +30,8 @@ const TOTAL_STEPS = 3;
 
 type TransportMode = "walk" | "bike" | "drive" | "transit";
 
-// Straight-line radius, not a routed isochrone — this app has no routing API,
-// so travel time is approximated from a flat average speed per mode. Good
-// enough to size the map's initial viewport; not meant to promise "reachable
-// in N minutes" accuracy the way real turn-by-turn routing would.
+// Flat average speed per mode — no routing API, so travel time becomes a
+// straight-line radius. Good enough to size the initial viewport, not exact.
 const MODE_SPEED_KMH: Record<TransportMode, number> = {
   walk: 5,
   bike: 15,
@@ -59,23 +57,15 @@ function minutesToRadiusMeters(minutes: number, mode: TransportMode): number {
   return Math.round(minutes * metersPerMinute);
 }
 
-// Dialog-wrapped questionnaire — same trigger/API shape as the old
-// StartSessionDialog (fullWidth prop, "Start session" trigger button, so
-// sticky-mobile-cta.tsx's usage carries over unchanged), but with a richer,
-// multi-step form (category + vibe + transport mode/travel time, not just a
-// flat miles radius). Submits by handing off to SwipeModal — the swipe deck
-// is this app's centerpiece flow, so the quiz's job is to seed it. It opens
-// as a sibling Dialog instead of a router.push to /swipe, so the page this
-// was opened from (today, always "/") stays mounted and visible behind it,
-// same as every other dialog in the app.
+// Multi-step quiz (category + vibe + location/travel time) that seeds the swipe
+// deck. Opens as a sibling Dialog rather than routing to /swipe, so the page
+// behind it stays mounted.
 export function SessionQuestionnaire({
   fullWidth,
   large,
 }: {
   fullWidth?: boolean;
-  // The quiz is the main entry point into the whole app — the hero CTA on
-  // the landing page uses this to stand out from every other button on the
-  // page, while the sticky mobile bar (constrained height) stays default.
+  // Hero CTA uses this to stand out; the sticky mobile bar stays default.
   large?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -96,6 +86,18 @@ export function SessionQuestionnaire({
     categories?: string;
     address?: string;
   }>({});
+  // key={step} remounts the content div each Next/Back, dropping focus to
+  // <body>. Move focus onto the new step instead — skip the first render so it
+  // doesn't fight Base UI's own initial-focus when the dialog opens.
+  const stepContentRef = useRef<HTMLDivElement>(null);
+  const isFirstStepRenderRef = useRef(true);
+  useEffect(() => {
+    if (isFirstStepRenderRef.current) {
+      isFirstStepRenderRef.current = false;
+      return;
+    }
+    stepContentRef.current?.focus();
+  }, [step]);
 
   function toggleCategory(category: SpotCategory) {
     setCategories((prev) => {
@@ -197,15 +199,10 @@ export function SessionQuestionnaire({
         );
       }
     } else {
-      // Not a nationwide sample: the dedup/junk-size cleanup pass has only
-      // ever been run against Portland metro and NYC data, and skipping
-      // this step is the fastest path through the quiz (likely the one
-      // most people actually take), so it can't risk surfacing uncleaned
-      // duplicates or sub-floor junk from everywhere else. Portland over
-      // NYC because this is OregonHacks. No radius set here on purpose —
-      // boundsFromSearch's own default (DEFAULT_VIEWPORT_RADIUS_METERS,
-      // ~25km) applies, the same scoping radius every other no-radius
-      // search already gets.
+      // Default to Portland, not a nationwide sample: the dedup/junk cleanup
+      // only ran on Portland and NYC, and skipping this step is the common path,
+      // so it can't surface uncleaned junk from elsewhere. No radius on purpose
+      // — boundsFromSearch's ~25km default applies.
       params.set("lat", String(PORTLAND_CENTER.lat));
       params.set("lng", String(PORTLAND_CENTER.lng));
     }
@@ -240,24 +237,33 @@ export function SessionQuestionnaire({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex justify-center gap-1.5" aria-hidden="true">
-            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-200 ease-out",
-                  i === step
-                    ? "w-5 bg-primary"
-                    : "w-1.5 bg-muted-foreground/30",
-                )}
-              />
-            ))}
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex justify-center gap-1.5" aria-hidden="true">
+              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-200 ease-out",
+                    i === step
+                      ? "w-5 bg-primary"
+                      : "w-1.5 bg-muted-foreground/30",
+                  )}
+                />
+              ))}
+            </div>
+            {/* Dots above are aria-hidden decoration; this is the step progress
+              for screen readers, aria-live so it's announced on change. */}
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              Step {step + 1} of {TOTAL_STEPS}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div
               key={step}
-              className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
+              ref={stepContentRef}
+              tabIndex={-1}
+              className="outline-none motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
             >
               {step === 0 && (
                 <div className="space-y-2">
@@ -441,11 +447,9 @@ export function SessionQuestionnaire({
                   Back
                 </Button>
               )}
-              {/* Distinct `key`s force React to swap DOM nodes here instead of
-                mutating one button's `type` in place — without them, clicking
-                "Next" on the second-to-last step flips the very node just
-                clicked to type="submit" mid-event, and the browser submits
-                the form as part of that same click. */}
+              {/* Distinct keys swap the DOM node instead of mutating `type` in
+                place — otherwise clicking "Next" flips the same node to
+                type="submit" mid-event and the browser submits the form. */}
               {step < TOTAL_STEPS - 1 ? (
                 <Button key="next" type="button" onClick={goNext}>
                   Next

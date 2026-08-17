@@ -17,7 +17,7 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import type { Spot, SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
-import type { BoundingBox } from "@/lib/geo";
+import { clampBoundsSpan, type BoundingBox } from "@/lib/geo";
 import { COVERAGE_REGIONS } from "@/lib/coverage-regions";
 import {
   getVerifiedSpotsInBounds,
@@ -33,19 +33,33 @@ export type AdvancedFilters = Pick<
   "sizeClasses" | "amenities" | "wheelchairAccessibleOnly" | "climbingGrades"
 >;
 
-const NYC_CENTER: [number, number] = [40.7484, -73.9857];
+const PORTLAND_CENTER: [number, number] = [45.5152, -122.6784];
 const DEFAULT_ZOOM = 11;
 
-// Below this zoom, the viewport is wide enough (multi-city/state/country)
-// that individual pins would mean fetching and rendering thousands of DOM
-// markers — show a density heatmap instead. At or above it, a viewport
-// realistically holds a bounded number of spots worth pinning individually.
+// Below this zoom the viewport spans multiple cities — too many pins to render,
+// so show a density heatmap instead of individual markers.
 const HEATMAP_ZOOM_THRESHOLD = 10;
 const VIEWPORT_FETCH_LIMIT = 1000;
 const MOVE_DEBOUNCE_MS = 300;
 
 export type MapMode = "markers" | "heatmap";
 type Viewport = { bounds: BoundingBox; zoom: number };
+
+// Matches markercluster's default icon but adds an accessible name: Leaflet
+// gives the cluster role="button" with no label, so a screen reader hears a
+// bare number. L.DivIcon has no `title` option, so set aria-label on the inner
+// element — the wrapper's accessible name resolves through its descendant.
+function clusterIcon(cluster: { getChildCount: () => number }) {
+  const childCount = cluster.getChildCount();
+  const sizeClass =
+    childCount < 10 ? "small" : childCount < 100 ? "medium" : "large";
+
+  return L.divIcon({
+    html: `<div aria-label="Cluster of ${childCount} spots — click to zoom in"><span aria-hidden="true">${childCount}</span></div>`,
+    className: `marker-cluster marker-cluster-${sizeClass}`,
+    iconSize: L.point(40, 40),
+  });
+}
 
 function boundsFromLeaflet(bounds: L.LatLngBounds): BoundingBox {
   return {
@@ -56,11 +70,9 @@ function boundsFromLeaflet(bounds: L.LatLngBounds): BoundingBox {
   };
 }
 
-// Reports the map's bounds/zoom on mount and after every pan/zoom, debounced
-// so a drag gesture doesn't fire a burst of queries. `onChange` is wrapped in
-// a ref so the moveend/zoomend handlers object passed to useMapEvents keeps a
-// stable identity across renders — otherwise react-leaflet tears down and
-// re-adds the native Leaflet listeners on every re-render of this component.
+// Reports bounds/zoom on mount and after every pan/zoom, debounced. onChange is
+// kept in a ref so the handlers object stays stable — otherwise react-leaflet
+// re-registers the native listeners on every render.
 function ViewportWatcher({
   onChange,
 }: {
@@ -87,7 +99,7 @@ function ViewportWatcher({
       moveend: () => scheduleReport(map),
       zoomend: () => scheduleReport(map),
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `map` below is assigned after this memo runs but closed over by reference; both fire only on real Leaflet events, well after `map` is set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `map` is assigned after this memo but only referenced inside handlers that fire post-mount.
     [scheduleReport],
   );
 
@@ -101,25 +113,22 @@ function ViewportWatcher({
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: fires once with the map's initial bounds, independent of prop identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only, reports the map's initial bounds once.
   }, []);
 
   return null;
 }
 
-// leaflet.heat predates ES modules/bundlers: its own source references a
-// bare global `L` instead of importing leaflet, so it can't be a static
-// top-level import (Turbopack/webpack throw "L is not defined" evaluating
-// it, since no such global exists in a bundled module scope). Loading it
-// dynamically, after explicitly exposing `window.L`, works around that.
+// leaflet.heat references a bare global `L` instead of importing it, so a
+// static import throws "L is not defined" under the bundler. Expose window.L
+// first, then import it dynamically.
 let heatPluginPromise: Promise<unknown> | null = null;
 function loadHeatPlugin(): Promise<unknown> {
   if (!heatPluginPromise) {
     (window as unknown as { L: typeof L }).L = L;
     heatPluginPromise = import("leaflet.heat").catch((error) => {
-      // Don't cache a failed load — a transient network/chunk error would
-      // otherwise permanently disable the heatmap for the rest of the
-      // session, since every future mount would await the same dead promise.
+      // Don't cache a failed load, or a transient error disables the heatmap
+      // for the whole session (every future mount awaits the same dead promise).
       heatPluginPromise = null;
       throw error;
     });
@@ -127,26 +136,16 @@ function loadHeatPlugin(): Promise<unknown> {
   return heatPluginPromise;
 }
 
-// leaflet.heat normalizes each point's weight against `max` (default 1.0)
-// to pick a gradient stop. Real per-bucket green-space counts are routinely
-// well above 1 (sampled live against the actual RPC: Portland's buckets
-// range up to ~70, NYC's up to ~190, with most falling between 10-55) — left
-// at the default, nearly every populated bucket saturates to the same
-// "hottest" color, erasing the sparse-vs-dense gradient this view exists to
-// show. Set closer to the observed p75-p90 range so the visible gradient
-// spans most real buckets; the rare higher-count outlier (e.g. a single
-// dense downtown cluster) still clips to "hottest," which is the correct
-// reading for it. Re-check this against real numbers once the RPC's
-// category filter (queries.ts's GREEN_SPACE_CATEGORIES) is live — it will
-// shift these counts down somewhat, more so in Portland than NYC.
+// leaflet.heat normalizes weights against `max` (default 1.0) to pick a
+// gradient stop. Real bucket counts run ~10-55 (Portland up to ~70, NYC ~190),
+// so the default saturates nearly everything to "hottest" and kills the
+// gradient. 40 ≈ observed p75-p90; rare outliers still clip, which is correct.
+// Re-check once the RPC's GREEN_SPACE_CATEGORIES filter is live — counts drop.
 const HEATMAP_MAX_INTENSITY = 40;
 
-// Green, not leaflet.heat's default blue-to-red "heat" ramp — this reads as
-// "more known green space," not "more danger/activity." The lowest stop
-// isn't fully transparent (unlike the library default, which hides any
-// point below ~40% of max) — a real but sparse bucket should still read as
-// "we found something here," not fade into the basemap and look identical
-// to a cell with zero data.
+// Green ramp, not the default blue-to-red "heat" — reads as "more green space,"
+// not danger. Lowest stop isn't transparent (the library default hides anything
+// below ~40% of max) so a sparse bucket still shows instead of vanishing.
 const HEATMAP_GRADIENT: Record<number, string> = {
   0.15: "#bbf7d0",
   0.4: "#4ade80",
@@ -154,8 +153,7 @@ const HEATMAP_GRADIENT: Record<number, string> = {
   1: "#14532d",
 };
 
-// No official react-leaflet binding for leaflet.heat exists, so this
-// imperatively creates/tears down an L.heatLayer via useMap().
+// No react-leaflet binding for leaflet.heat, so manage the L.heatLayer by hand.
 function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
   const map = useMap();
   const [pluginReady, setPluginReady] = useState(false);
@@ -216,18 +214,17 @@ export function SpotMap({
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [spots, setSpots] = useState<Spot[]>(initialSpots);
   const [densityPoints, setDensityPoints] = useState<L.HeatLatLngTuple[]>([]);
-  // Registry of live marker instances, keyed by spot id — lets the focus
-  // effect below imperatively open one specific marker's popup once it's
-  // actually rendered, without react-leaflet exposing that as a declarative
-  // prop on <Marker>.
+  // Live marker instances by spot id, so the focus effect can open one popup
+  // imperatively (react-leaflet has no declarative prop for it).
   const markerRefs = useRef<Map<string, L.Marker>>(new Map());
-  const hasOpenedFocusPopupRef = useRef(false);
+  // Which spot's popup was last auto-opened. Tracks the id, not a bool: a
+  // second "View on map" to a different spot on the same mounted instance
+  // needs to open its popup too, which a one-shot flag would block.
+  const openedFocusSpotIdRef = useRef<string | null>(null);
 
-  // `initialSpots` (the SSR-fetched default viewport) is only authoritative
-  // until the client's first real viewport-driven fetch resolves — after
-  // that, resyncing from a later prop change would clobber whatever the user
-  // has since panned/zoomed to. Before that point, still-mounted-but-not-yet-
-  // fetched, a new `initialSpots` (e.g. from router.refresh()) should apply.
+  // initialSpots (SSR default viewport) only wins until the first client fetch;
+  // after that, reapplying it would clobber wherever the user has panned to. A
+  // new initialSpots before that point (e.g. router.refresh()) still applies.
   const hasFetchedRef = useRef(false);
   useEffect(() => {
     if (!hasFetchedRef.current) setSpots(initialSpots);
@@ -238,6 +235,39 @@ export function SpotMap({
     [categories],
   );
 
+  // Debounces filter-driven refetches separately from viewport-driven ones
+  // (viewport is already debounced in ViewportWatcher). Sharing one timer would
+  // double pan latency; no debounce fired one request per checkbox click
+  // (observed: 7 toggles → 7 requests). filtersRef holds the latest values so
+  // the fetch reads current filters, not what was set when the timer scheduled.
+  const filtersRef = useRef({
+    categoryList,
+    minParkAreaM2,
+    advancedFilters,
+    activity,
+    picnic,
+  });
+  const [debouncedFiltersTick, setDebouncedFiltersTick] = useState(0);
+  // Bumped on every filter change so an in-flight fetch under old filters can
+  // detect it's stale and drop its late result instead of clobbering a newer one.
+  const filterRevisionRef = useRef(0);
+  const isFirstFilterRenderRef = useRef(true);
+  useEffect(() => {
+    // Write the ref in the effect, not render. Runs on every filter change,
+    // before the delayed debouncedFiltersTick lets the fetch effect re-read it.
+    filtersRef.current = { categoryList, minParkAreaM2, advancedFilters, activity, picnic };
+    filterRevisionRef.current += 1;
+    if (isFirstFilterRenderRef.current) {
+      isFirstFilterRenderRef.current = false;
+      return;
+    }
+    const id = setTimeout(
+      () => setDebouncedFiltersTick((t) => t + 1),
+      MOVE_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(id);
+  }, [categoryList, minParkAreaM2, advancedFilters, activity, picnic]);
+
   const handleViewportChange = useCallback((next: Viewport) => {
     setViewport(next);
   }, []);
@@ -247,36 +277,49 @@ export function SpotMap({
       ? "markers"
       : "heatmap";
 
-  // No categories selected means "show nothing" — derived directly at render
-  // time rather than via setState in the effect below, so there's no need to
-  // dispatch a fetch (or a state update) just to represent an empty result.
+  // No categories = show nothing. Derived at render, so no fetch needed for it.
   const noCategoriesSelected = categoryList.length === 0;
   const visibleSpots = noCategoriesSelected ? [] : spots;
 
-  // Opens the focused marker's popup exactly once, as soon as it actually
-  // exists in the currently-rendered set — the results list only passes the
-  // spot's own coordinates, not a guarantee it's already in `spots`.
+  // Open the focused marker's popup once it exists in the rendered set — the
+  // results list passes coords, not a guarantee the spot is already in `spots`.
   useEffect(() => {
-    if (!focusSpotId || hasOpenedFocusPopupRef.current || noCategoriesSelected)
+    if (
+      !focusSpotId ||
+      openedFocusSpotIdRef.current === focusSpotId ||
+      noCategoriesSelected
+    )
       return;
     const marker = markerRefs.current.get(focusSpotId);
     if (marker) {
       marker.openPopup();
-      hasOpenedFocusPopupRef.current = true;
+      openedFocusSpotIdRef.current = focusSpotId;
     }
   }, [focusSpotId, spots, noCategoriesSelected]);
 
-  // Individual-marker mode: refetches on pan/zoom/category change.
+  // Instant "0 results" for the no-categories state — kept separate from the
+  // fetch effect on purpose. noCategoriesSelected flips synchronously per click;
+  // as a fetch dependency it would fire a request on every zero-crossing,
+  // defeating the debounce (observed: 5 toggles through zero → 4 requests, not 1).
+  useEffect(() => {
+    if (!viewport || mode !== "markers" || !noCategoriesSelected) return;
+    hasFetchedRef.current = true;
+    onViewChange?.({ count: 0, mode: "markers" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange excluded, same as the fetch effect below.
+  }, [viewport, mode, noCategoriesSelected]);
+
+  // Marker mode: refetch on pan/zoom (pre-debounced) or filter change (debounced
+  // via debouncedFiltersTick). Skips based on filtersRef.current.categoryList
+  // (settled as of the last tick), not the live noCategoriesSelected.
   useEffect(() => {
     if (!viewport || mode !== "markers") return;
 
-    if (noCategoriesSelected) {
-      hasFetchedRef.current = true;
-      onViewChange?.({ count: 0, mode: "markers" });
-      return;
-    }
+    const { categoryList, minParkAreaM2, advancedFilters, activity, picnic } =
+      filtersRef.current;
+    if (categoryList.length === 0) return;
 
     let cancelled = false;
+    const filterRevision = filterRevisionRef.current;
     getVerifiedSpotsInBounds(viewport.bounds, {
       limit: VIEWPORT_FETCH_LIMIT,
       categories: categoryList,
@@ -286,7 +329,7 @@ export function SpotMap({
       picnic,
     })
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled || filterRevision !== filterRevisionRef.current) return;
         hasFetchedRef.current = true;
         setSpots(result);
         onViewChange?.({ count: result.length, mode: "markers" });
@@ -298,29 +341,17 @@ export function SpotMap({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded: it's a per-render prop from the parent, not something a refetch should be keyed on.
-  }, [
-    viewport,
-    mode,
-    categoryList,
-    minParkAreaM2,
-    advancedFilters,
-    activity,
-    picnic,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange excluded (per-render prop). Filters read via filtersRef.current; debouncedFiltersTick is their proxy dependency.
+  }, [viewport, mode, debouncedFiltersTick]);
 
-  // Heatmap mode: fetchSpotDensity (queries.ts) always passes its own fixed
-  // GREEN_SPACE_CATEGORIES, not this component's categoryList — the density
-  // view's category scope is an editorial decision (see that constant's
-  // comment), not the user's live filter selection, so this effect only
-  // depends on viewport. Toggling a category badge while zoomed out is a
-  // documented no-op, not a bug (the dropdowns are disabled in this mode
-  // for exactly this reason).
+  // Heatmap mode: fetchSpotDensity uses its own fixed GREEN_SPACE_CATEGORIES,
+  // not categoryList, so this only depends on viewport. Toggling a category
+  // while zoomed out is a no-op by design (the dropdowns are disabled here).
   useEffect(() => {
     if (!viewport || mode !== "heatmap") return;
     let cancelled = false;
 
-    getSpotDensity(viewport.bounds)
+    getSpotDensity(clampBoundsSpan(viewport.bounds))
       .then((buckets) => {
         if (cancelled) return;
         const points = buckets.map(
@@ -332,30 +363,26 @@ export function SpotMap({
       })
       .catch((error) => {
         console.error("Failed to fetch spot density", error);
-        // Still report the mode even on failure — otherwise the page chrome
-        // (title/legend/hint, disabled filter dropdowns, all driven by the
-        // parent's own copy of `mode` from this callback) stays stuck
-        // showing stale marker-mode UI while the map underneath has already
-        // switched to a heatmap layer, just with no points in it.
+        // Report the mode even on failure, or the parent's chrome stays stuck
+        // in marker-mode UI while the map has already switched to an empty heatmap.
         if (!cancelled) onViewChange?.({ count: 0, mode: "heatmap" });
       });
 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded, see marker-mode effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange excluded, see marker-mode effect above.
   }, [viewport, mode]);
 
   return (
     <MapContainer
-      center={initialCenter ?? NYC_CENTER}
+      center={initialCenter ?? PORTLAND_CENTER}
       zoom={focusSpotId ? 16 : initialCenter ? 13 : DEFAULT_ZOOM}
       scrollWheelZoom
       className="h-full w-full"
     >
-      {/* CARTO Positron: no API key required, minimal light basemap — the
-          standard OSM raster tiles above render every road/label/POI, which
-          reads as noisy at the zoom levels this app is used at. */}
+      {/* CARTO Positron: no API key, minimal basemap. Standard OSM tiles render
+          every road/label/POI, too noisy at the zoom levels used here. */}
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
@@ -363,16 +390,10 @@ export function SpotMap({
       />
       <ViewportWatcher onChange={handleViewportChange} />
       {mode === "markers" ? (
-        // Clustered instead of one Marker+Popup DOM node per spot: at up to
-        // 1000 spots in view (VIEWPORT_FETCH_LIMIT), unclustered rendering
-        // was the main cause of map lag. Clustering collapses nearby pins
-        // into a single count bubble until the user zooms in enough to
-        // separate them, so the DOM node count stays bounded regardless of
-        // how dense a viewport gets. The ref callback still registers each
-        // Marker instance for the focusSpotId popup-opening effect above —
-        // at focusSpotId's forced zoom (16), the pin it targets has already
-        // separated out of any cluster.
-        <MarkerClusterGroup chunkedLoading>
+        // Clustered: up to 1000 markers in view (VIEWPORT_FETCH_LIMIT) was the
+        // main cause of map lag. Clustering keeps the DOM node count bounded.
+        // At focusSpotId's forced zoom (16) the target pin is already separated.
+        <MarkerClusterGroup chunkedLoading iconCreateFunction={clusterIcon}>
           {visibleSpots.map((spot) => {
             const verdict = getSpotVerdict(spot);
             return (
@@ -380,6 +401,9 @@ export function SpotMap({
                 key={spot.id}
                 position={[spot.lat, spot.lng]}
                 icon={markerIcon(CATEGORY_META[spot.category].color)}
+                // Leaflet marks the icon role="button" but gives it no name;
+                // `title` becomes its accessible name so pins aren't bare buttons.
+                title={spot.name}
                 ref={(instance) => {
                   if (instance) markerRefs.current.set(spot.id, instance);
                   else markerRefs.current.delete(spot.id);
@@ -434,12 +458,9 @@ export function SpotMap({
         </MarkerClusterGroup>
       ) : (
         <>
-          {/* Dashed outline, not a filled claim — this is the only honest
-              signal of "trust this area's reading" the UI has, since there's
-              no schema column marking which rows were deduped/cleaned (see
-              coverage-regions.ts). Heat renders everywhere regardless (so
-              panning across the boundary doesn't look broken), but only
-              inside these outlines does explore-view.tsx's legend apply. */}
+          {/* Dashed outlines mark where the data was actually deduped/cleaned
+              (no schema column tracks this — see coverage-regions.ts). Heat
+              renders everywhere, but the legend only applies inside these. */}
           {COVERAGE_REGIONS.map((region) => (
             <Rectangle
               key={region.name}

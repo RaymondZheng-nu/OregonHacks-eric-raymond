@@ -11,22 +11,62 @@ import type { Spot } from "@/lib/types";
 
 const AUTO_ADVANCE_MS = 5000;
 
+// Own state per slide so one failed photo doesn't blank the tile — photos
+// hotlink to their source with no fallback. Falls back to the location preview.
+function CarouselSlideImage({
+  spot,
+  priority,
+}: {
+  spot: Spot;
+  priority: boolean;
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (!spot.photo_url || imgFailed) {
+    return (
+      <SpotLocationPreview
+        lat={spot.lat}
+        lng={spot.lng}
+        category={spot.category}
+      />
+    );
+  }
+
+  return (
+    <Image
+      src={spot.photo_url}
+      alt={spot.name}
+      fill
+      priority={priority}
+      sizes="(min-width: 768px) 50vw, 100vw"
+      className="object-cover"
+      onError={() => setImgFailed(true)}
+    />
+  );
+}
+
 export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
   const reduceMotion = useReducedMotion();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  // Lets the interval callback read the current index without depending on it.
+  const indexRef = useRef(0);
+  useEffect(() => {
+    indexRef.current = index;
+  }, [index]);
 
-  // Auto-advance by scrolling the native snap container — this doubles as
-  // the touch/trackpad swipe implementation, so there's no separate gesture
-  // handler to keep in sync with the dots.
+  // Auto-advance by scrolling the native snap container (also the swipe impl).
+  // Not keyed on `index`: handleScroll fires setIndex during each smooth-scroll,
+  // and depending on it would rebuild the interval mid-transition and reset the
+  // countdown. Read indexRef.current instead.
   useEffect(() => {
     if (reduceMotion || paused || spots.length <= 1) return;
 
     const id = setInterval(() => {
       const scroller = scrollerRef.current;
       if (!scroller) return;
-      const next = (index + 1) % spots.length;
+      const next = (indexRef.current + 1) % spots.length;
       scroller.scrollTo({
         left: next * scroller.clientWidth,
         behavior: "smooth",
@@ -34,10 +74,9 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
     }, AUTO_ADVANCE_MS);
 
     return () => clearInterval(id);
-  }, [index, paused, reduceMotion, spots.length]);
+  }, [paused, reduceMotion, spots.length]);
 
-  // Keeps the dots in sync when the user swipes/scrolls manually instead of
-  // going through goTo().
+  // Keeps the dots in sync on manual swipe/scroll (not via goTo).
   function handleScroll() {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientWidth === 0) return;
@@ -77,22 +116,10 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
               key={spot.id}
               className="relative h-full w-full shrink-0 snap-center"
             >
-              {spot.photo_url ? (
-                <Image
-                  src={spot.photo_url}
-                  alt={spot.name}
-                  fill
-                  priority={spot.id === spots[0].id}
-                  sizes="(min-width: 768px) 50vw, 100vw"
-                  className="object-cover"
-                />
-              ) : (
-                <SpotLocationPreview
-                  lat={spot.lat}
-                  lng={spot.lng}
-                  category={spot.category}
-                />
-              )}
+              <CarouselSlideImage
+                spot={spot}
+                priority={spot.id === spots[0].id}
+              />
               <div className="absolute inset-x-0 bottom-0 z-[1001] bg-gradient-to-t from-black/70 to-transparent p-4">
                 <p className="text-sm font-medium text-white">{spot.name}</p>
                 <p

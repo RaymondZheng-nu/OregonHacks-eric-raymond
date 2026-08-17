@@ -8,14 +8,8 @@ import {
 } from "@/components/ui/dialog";
 import { SavedList } from "@/components/saved-list";
 
-// Opens in place instead of navigating to /saved — whatever's underneath
-// (the homepage, or a swipe deck mid-session) stays mounted and visible
-// behind it. Navigating away used to unmount the quiz's in-progress swipe
-// state entirely, so getting back to it meant redoing the quiz from
-// scratch — same problem swipe-modal.tsx solved for the quiz-to-swipe
-// handoff, applied here to the swipe-deck-to-saved-list handoff. /saved
-// itself is unchanged and still handles direct links/bookmarks as a real
-// page, reusing this same SavedList.
+// In-place modal so a mid-session swipe deck stays mounted behind it; routing
+// to /saved would unmount it. /saved still exists as a real page reusing SavedList.
 export function SavedModal({
   open,
   onClose,

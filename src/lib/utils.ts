@@ -6,11 +6,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Fisher-Yates. Must only ever be called server-side for anything whose
-// output reaches a Client Component's initial render — calling it again
-// during client hydration (e.g. inside a useState lazy initializer) produces
-// a different order than the server did and React throws a hydration
-// mismatch, since Math.random() isn't deterministic across the two runs.
+// Fisher-Yates. Keep it server-side for anything that reaches a Client
+// Component's initial render — re-running it during hydration gives a different
+// order (Math.random isn't deterministic) and React throws a mismatch.
 export function shuffle<T>(items: T[]): T[] {
   const copy = [...items]
   for (let i = copy.length - 1; i > 0; i--) {
@@ -20,13 +18,9 @@ export function shuffle<T>(items: T[]): T[] {
   return copy
 }
 
-// Same server-only-for-hydration caveat as shuffle() above. Shuffles a spot
-// list the same way, but keeps the (independently randomized) photo-having
-// spots ahead of the (also randomized) photo-less ones — a tiebreaker within
-// an already-valid match set, never a filter, so nothing is excluded. Used
-// wherever a fetch already prioritized photo-having rows server-side
-// (SpotsInBoundsOptions.photosFirst) and still needs a display shuffle
-// without a flat shuffle() undoing that prioritization.
+// Same hydration caveat as shuffle(). Randomizes photo-having and photo-less
+// spots independently, keeping photo-having ones first — a tiebreaker, not a
+// filter. Preserves a photosFirst fetch's ordering that a flat shuffle would undo.
 export function shuffleWithPhotosFirst(spots: Spot[]): Spot[] {
   const withPhoto = shuffle(spots.filter((spot) => spot.photo_url))
   const withoutPhoto = shuffle(spots.filter((spot) => !spot.photo_url))

@@ -15,11 +15,13 @@
     "backfill:area": "node scripts/backfill-area.mjs",
     "backfill:climbing-grade": "node scripts/backfill-climbing-grade.mjs",
     "backfill:photos": "node --env-file=.env.local scripts/backfill-photos.mjs",
+    "apply:photo-backfill": "node --env-file=.env.local scripts/apply-photo-backfill.mjs",
     "dedup:cleanup": "node scripts/dedup-cleanup.mjs",
     "verify:e2e": "node --env-file=.env.local scripts/verify-e2e.mjs",
     "ingest:osm": "node --env-file=.env.local scripts/ingest-osm.mjs",
     "ingest:osm:cities": "node --env-file=.env.local scripts/ingest-osm-cities.mjs",
-    "ingest:socrata": "node --env-file=.env.local scripts/ingest-socrata.mjs"
+    "ingest:socrata": "node --env-file=.env.local scripts/ingest-socrata.mjs",
+    "ingest:reddit-citations": "node --env-file=.env.local scripts/ingest-reddit-citations.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

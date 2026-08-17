@@ -10,9 +10,8 @@ export function CookieBanner() {
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
-    // localStorage isn't available during SSR, so this can't be a lazy
-    // useState initializer — it has to run post-mount, same render on
-    // server and first client paint (hidden), then reveal after.
+    // Post-mount, not a lazy initializer — server has no localStorage, so
+    // render hidden on both, then reveal.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDismissed(localStorage.getItem(STORAGE_KEY) === "1");
   }, []);

@@ -16,9 +16,7 @@ export const metadata: Metadata = {
     "Swipe through nearby parks, gardens, and quiet spots — save the ones worth visiting.",
 };
 
-// A wider pool than any single batch needs, so "Generate more" has real
-// variety to draw from instead of looping through a handful — same idea as
-// /results' old POOL_LIMIT.
+// Wider than one batch needs so "Generate more" has variety to draw from.
 const POOL_LIMIT = 40;
 
 export default async function SwipePage({
@@ -30,12 +28,8 @@ export default async function SwipePage({
   const parsed = parseSearchParams(params);
   const hasLocation = parsed.lat !== null && parsed.lng !== null;
 
-  // No location: the quiz itself no longer lands here with no lat/lng at all
-  // (skipping its address step now defaults to a Portland-scoped search, see
-  // session-questionnaire.tsx's PORTLAND_COORDS) — this only covers a direct
-  // /swipe visit with no params, where a genuinely nationwide sample
-  // (fetchVerifiedSpotsNationwide) is the honest fallback rather than
-  // silently defaulting to a fixed city.
+  // No location only happens on a direct /swipe visit (the quiz always sends
+  // coords now), where a nationwide sample is the honest fallback.
   let spots;
   let userLocation: { lat: number; lng: number } | undefined;
   if (hasLocation) {
@@ -48,11 +42,9 @@ export default async function SwipePage({
       picnic: parsed.picnic,
       photosFirst: true,
     });
-    // Unlike the nationwide fetch below, the bounds query returns DB order
-    // (most-recently-created first) — shuffle it so the deck isn't just the
-    // newest-ingested spots in a row. shuffleWithPhotosFirst, not a flat
-    // shuffle: the query above already weighted photo-having rows into this
-    // pool via photosFirst, and a flat shuffle would undo that.
+    // Bounds query returns DB order, so shuffle it off the newest-ingested run.
+    // shuffleWithPhotosFirst preserves the photosFirst weighting a flat shuffle
+    // would undo.
     spots = shuffleWithPhotosFirst(pool);
   } else {
     spots = await getVerifiedSpotsNationwide({

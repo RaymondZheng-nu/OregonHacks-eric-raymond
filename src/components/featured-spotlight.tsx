@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { CheckIcon, FlagIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +11,33 @@ import { CATEGORY_META } from "@/lib/categories";
 import { getSpotVerdict } from "@/lib/spot-verdict";
 import { cn } from "@/lib/utils";
 import type { Spot } from "@/lib/types";
+
+// Own state per card so one failed photo doesn't blank the tile — photos
+// hotlink to their source with no fallback. Falls back to the location preview.
+function FeaturedSpotlightImage({ spot }: { spot: Spot }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (!spot.photo_url || imgFailed) {
+    return (
+      <SpotLocationPreview
+        lat={spot.lat}
+        lng={spot.lng}
+        category={spot.category}
+      />
+    );
+  }
+
+  return (
+    <Image
+      src={spot.photo_url}
+      alt={spot.name}
+      fill
+      sizes="(min-width: 640px) 33vw, 50vw"
+      className="object-cover"
+      onError={() => setImgFailed(true)}
+    />
+  );
+}
 
 export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
   const reduceMotion = useReducedMotion();
@@ -31,32 +60,21 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
               ease: [0.16, 1, 0.3, 1],
             }}
           >
+            {/* Links to /explore focused on this spot. `block` so the anchor
+                doesn't collapse to its inline size inside the motion.div. */}
+            <Link
+              href={`/explore?spot=${spot.id}&lat=${spot.lat}&lng=${spot.lng}`}
+              className="block"
+            >
             <Card
               size="sm"
               className="gap-2 pt-0 transition-shadow duration-200 ease-out hover:shadow-md hover:ring-foreground/15"
             >
               <div className="relative aspect-4/3 w-full overflow-hidden rounded-t-xl">
-                {spot.photo_url ? (
-                  <Image
-                    src={spot.photo_url}
-                    alt={spot.name}
-                    fill
-                    sizes="(min-width: 640px) 33vw, 50vw"
-                    className="object-cover"
-                  />
-                ) : (
-                  <SpotLocationPreview
-                    lat={spot.lat}
-                    lng={spot.lng}
-                    category={spot.category}
-                  />
-                )}
-                {/* Only the two signal-bearing tones get a badge — the common
-                    zero-votes case stays visually clean, no room here for the
-                    full verdict sentence used elsewhere (map popup, results,
-                    carousel), so this is a compact icon+count instead.
-                    z-[1001] keeps it above the location-preview map's own
-                    panes/controls when there's no photo. */}
+                <FeaturedSpotlightImage spot={spot} />
+                {/* Only positive/caution get a badge; neutral stays clean.
+                    Compact icon+count, not the full verdict sentence.
+                    z-[1001] keeps it above the location-preview map's panes. */}
                 {verdict.tone !== "neutral" && (
                   <div
                     className={cn(
@@ -90,6 +108,7 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
                 </p>
               </CardContent>
             </Card>
+            </Link>
           </motion.div>
         );
       })}

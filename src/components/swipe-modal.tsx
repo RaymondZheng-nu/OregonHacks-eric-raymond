@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SpotSwipeDeck } from "@/components/spot-swipe-deck";
 import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
 import { shuffleWithPhotosFirst } from "@/lib/utils";
@@ -11,9 +11,7 @@ import {
 } from "@/lib/supabase/queries.client";
 import type { Spot } from "@/lib/types";
 
-// Same pool size as /swipe's full-page fallback (app/swipe/page.tsx) — a
-// wider pool than any single batch needs, so "Generate more" has real
-// variety to draw from instead of looping through a handful.
+// Wider than one batch needs so "Generate more" has variety to draw from.
 const POOL_LIMIT = 40;
 
 type DeckData = {
@@ -21,13 +19,9 @@ type DeckData = {
   userLocation?: { lat: number; lng: number };
 };
 
-// Card-styled modal over whatever page the quiz was opened from (today,
-// always "/" — SessionQuestionnaire only renders there) instead of
-// navigating to /swipe: fetching client-side means the page underneath
-// never unmounts, so it stays visible (dimmed) behind the same Dialog
-// overlay every other dialog in this app uses. /swipe itself is unchanged
-// and still handles direct links/refreshes as a real full page, where
-// there's no "page behind" to preserve anyway.
+// Modal over the current page instead of routing to /swipe: fetching
+// client-side keeps the page behind it mounted and dimmed. /swipe still exists
+// as a real full page for direct links/refreshes.
 export function SwipeModal({
   query,
   onClose,
@@ -59,15 +53,9 @@ export function SwipeModal({
           picnic: parsed.picnic,
           photosFirst: true,
         });
-        // Unlike the nationwide fetch below, the bounds query returns DB
-        // order — shuffle it so the deck isn't just the newest-ingested
-        // spots in a row. shuffleWithPhotosFirst, not a flat shuffle: the
-        // query above already weighted photo-having rows into this pool via
-        // photosFirst, and a flat shuffle would immediately undo that by
-        // remixing them back in with everything else. Safe to shuffle
-        // client-side here (unlike utils.ts's shuffle doc warning about
-        // hydration mismatches): this component never renders server-side,
-        // so there's no SSR order to mismatch against.
+        // Bounds query returns DB order, so shuffle it off the newest-ingested
+        // run. shuffleWithPhotosFirst preserves the photosFirst weighting a flat
+        // shuffle would undo. Client-only component, so no SSR order to mismatch.
         spots = shuffleWithPhotosFirst(pool);
       } else {
         spots = await getVerifiedSpotsNationwide({
@@ -90,12 +78,14 @@ export function SwipeModal({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on `query` identity only; SessionQuestionnaire mounts a fresh SwipeModal per submit, so this only ever runs once per instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on `query` only; a fresh SwipeModal mounts per submit, so this runs once per instance.
   }, [query]);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="h-[min(85dvh,700px)] gap-0 overflow-hidden p-0 sm:max-w-sm">
+        {/* Accessible name for the dialog; the visible header is the wordmark. */}
+        <DialogTitle className="sr-only">Swipe through nearby spots</DialogTitle>
         {data ? (
           <SpotSwipeDeck
             spots={data.spots}

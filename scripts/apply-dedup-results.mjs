@@ -155,10 +155,13 @@ async function main() {
   });
 
   console.log(
-    `Done. merged_children=${mergedChildren} tags_applied=${tagRows.length - tagErrors} tag_errors=${tagErrors}`
+    `Done. merged_children=${mergedChildren} tags_applied=${tagRows.length - tagErrors} tag_errors=${tagErrors} unparsed=${unparsedLines.length}`
   );
 
-  if (tagErrors > 0) process.exitCode = 1;
+  // Unparsed lines are rows that were silently never applied — that's just
+  // as much a failure as a row that errored while applying, and must not
+  // let this script report success while some tag updates never happened.
+  if (tagErrors > 0 || unparsedLines.length > 0) process.exitCode = 1;
 }
 
 main().catch((err) => {
