@@ -13,10 +13,12 @@ import { shuffleWithPhotosFirst } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Swipe Spots",
   description:
-    "Swipe through nearby parks, gardens, and quiet spots, and save the ones worth visiting.",
+    "Swipe through nearby parks, gardens, and quiet spots — save the ones worth visiting.",
 };
 
-// Wider than one batch needs so "Generate more" has variety to draw from.
+// A wider pool than any single batch needs, so "Generate more" has real
+// variety to draw from instead of looping through a handful — same idea as
+// /results' old POOL_LIMIT.
 const POOL_LIMIT = 40;
 
 export default async function SwipePage({
@@ -28,8 +30,12 @@ export default async function SwipePage({
   const parsed = parseSearchParams(params);
   const hasLocation = parsed.lat !== null && parsed.lng !== null;
 
-  // No location only happens on a direct /swipe visit (the quiz always sends
-  // coords now), where a nationwide sample is the honest fallback.
+  // No location: the quiz itself no longer lands here with no lat/lng at all
+  // (skipping its address step now defaults to a Portland-scoped search, see
+  // session-questionnaire.tsx's PORTLAND_COORDS) — this only covers a direct
+  // /swipe visit with no params, where a genuinely nationwide sample
+  // (fetchVerifiedSpotsNationwide) is the honest fallback rather than
+  // silently defaulting to a fixed city.
   let spots;
   let userLocation: { lat: number; lng: number } | undefined;
   if (hasLocation) {
@@ -42,9 +48,11 @@ export default async function SwipePage({
       picnic: parsed.picnic,
       photosFirst: true,
     });
-    // Bounds query returns DB order, so shuffle it off the newest-ingested run.
-    // shuffleWithPhotosFirst preserves the photosFirst weighting a flat shuffle
-    // would undo.
+    // Unlike the nationwide fetch below, the bounds query returns DB order
+    // (most-recently-created first) — shuffle it so the deck isn't just the
+    // newest-ingested spots in a row. shuffleWithPhotosFirst, not a flat
+    // shuffle: the query above already weighted photo-having rows into this
+    // pool via photosFirst, and a flat shuffle would undo that.
     spots = shuffleWithPhotosFirst(pool);
   } else {
     spots = await getVerifiedSpotsNationwide({
@@ -57,15 +65,7 @@ export default async function SwipePage({
   }
 
   return (
-    // bg-accent, not bg-background: dark mode's --background is near-black,
-    // which read as a harsh solid void filling the empty space around the
-    // deck. bg-accent is meaningfully lighter (and has the brand's green
-    // tint), closer to the softer, less-than-pure-black feel the quiz
-    // dialog's own overlay has.
-    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-accent">
-      {/* Same corner position + ghost icon-button treatment as the quiz
-          dialog's own close button — one consistent exit affordance, not a
-          text link on desktop and a different icon on mobile. */}
+    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
       <Button
         variant="ghost"
         size="icon-sm"
