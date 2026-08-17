@@ -3,11 +3,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SpotSwipeDeck } from "@/components/spot-swipe-deck";
-import {
-  boundsFromSearch,
-  buildExploreParams,
-  parseSearchParams,
-} from "@/lib/search-params";
+import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
 import { shuffleWithPhotosFirst } from "@/lib/utils";
 import {
   getVerifiedSpotsInBounds,
@@ -23,7 +19,6 @@ const POOL_LIMIT = 40;
 type DeckData = {
   spots: Spot[];
   userLocation?: { lat: number; lng: number };
-  exploreParams: string;
 };
 
 // Card-styled modal over whatever page the quiz was opened from (today,
@@ -85,11 +80,7 @@ export function SwipeModal({
       }
 
       if (cancelled) return;
-      setData({
-        spots,
-        userLocation,
-        exploreParams: buildExploreParams(parsed).toString(),
-      });
+      setData({ spots, userLocation });
     }
 
     load().catch((error) => {
@@ -114,7 +105,6 @@ export function SwipeModal({
               activity: parsed.activity,
               picnic: parsed.picnic,
             }}
-            exploreParams={data.exploreParams}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8">

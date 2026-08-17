@@ -5,16 +5,8 @@ import Link from "next/link";
 import { MapPinIcon, TrashIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CATEGORY_META } from "@/lib/categories";
+import { directionsUrl } from "@/lib/geo";
 import { getSavedSpots, removeSavedSpot, type SavedSpot } from "@/lib/saved-spots";
-
-// https://developers.google.com/maps/documentation/urls/get-started#directions-action
-// Opens the Google Maps app if installed (iOS/Android), falls back to Google
-// Maps web otherwise — same universal-link pattern already used for "Get
-// directions" in spot-map.tsx's marker popup, reused here rather than
-// building separate Apple Maps device detection.
-function directionsUrl(spot: Pick<SavedSpot, "lat" | "lng">): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`;
-}
 
 export default function SavedPage() {
   // Starts empty and loads in an effect, not lazy useState(getSavedSpots) —
@@ -89,7 +81,7 @@ export default function SavedPage() {
                 size="sm"
                 nativeButton={false}
                 render={
-                  <a href={directionsUrl(spot)} target="_blank" rel="noopener noreferrer">
+                  <a href={directionsUrl(spot.lat, spot.lng)} target="_blank" rel="noopener noreferrer">
                     <MapPinIcon aria-hidden="true" />
                     Directions
                   </a>

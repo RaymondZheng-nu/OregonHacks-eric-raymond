@@ -7,11 +7,7 @@ import {
   getVerifiedSpotsInBounds,
   getVerifiedSpotsNationwide,
 } from "@/lib/supabase/queries.server";
-import {
-  boundsFromSearch,
-  buildExploreParams,
-  parseSearchParams,
-} from "@/lib/search-params";
+import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
 import { shuffleWithPhotosFirst } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -68,11 +64,6 @@ export default async function SwipePage({
     });
   }
 
-  // Forwarded to the client component so it can build both the nav bar's
-  // "Map view" link and each card's "View on map" link without re-deriving
-  // the original search from scratch.
-  const exploreParams = buildExploreParams(parsed);
-
   return (
     <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
       <Button
@@ -95,7 +86,6 @@ export default async function SwipePage({
           activity: parsed.activity,
           picnic: parsed.picnic,
         }}
-        exploreParams={exploreParams.toString()}
       />
     </div>
   );

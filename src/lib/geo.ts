@@ -14,6 +14,15 @@ export function clampRadiusMeters(radiusMeters: number): number {
   return Math.min(Math.max(radiusMeters, 1), MAX_QUERY_RADIUS_METERS);
 }
 
+// https://developers.google.com/maps/documentation/urls/get-started#directions-action
+// Opens the Google Maps app if installed (iOS/Android), falls back to Google
+// Maps web otherwise — same universal-link pattern used for "Get directions"
+// wherever a spot needs one (spot-map.tsx's marker popup, /saved, the swipe
+// deck's location preview), factored out once a third call site needed it.
+export function directionsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
+
 export function isValidLatLng(lat: number, lng: number): boolean {
   return (
     Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180

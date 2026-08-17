@@ -22,9 +22,15 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
 import { CATEGORY_META } from "@/lib/categories";
-import { haversineDistanceMeters } from "@/lib/geo";
+import { directionsUrl, haversineDistanceMeters } from "@/lib/geo";
 import { getSpotVerdict } from "@/lib/spot-verdict";
 import {
   formatDistance,
@@ -60,17 +66,16 @@ function SwipeCard({
   spot,
   distanceMeters,
   filters,
-  exploreParams,
   onResolved,
   isTop,
 }: {
   spot: Spot;
   distanceMeters: number | null;
   filters: MatchFilters;
-  exploreParams: string;
   onResolved: (direction: SwipeDirection) => void;
   isTop: boolean;
 }) {
+  const [showLocation, setShowLocation] = useState(false);
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
   const skipOpacity = useTransform(x, [-120, -20], [1, 0]);
@@ -94,145 +99,171 @@ function SwipeCard({
   const reasonChip = getMatchReasonChip(spot, filters);
   const distanceLabel = formatDistance(distanceMeters);
 
-  const viewParams = new URLSearchParams(exploreParams);
-  viewParams.set("spot", spot.id);
-  viewParams.set("lat", String(spot.lat));
-  viewParams.set("lng", String(spot.lng));
-
   return (
-    <motion.div
-      className="absolute inset-0"
-      style={isTop ? { x, rotate } : undefined}
-      drag={isTop ? "x" : false}
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.6}
-      // Spring, not a flat power curve, for the snap-back-to-center when a
-      // drag release doesn't cross the swipe threshold — matches the feel
-      // motion-primitives' carousel uses for its own drag release (damping/
-      // stiffness tuned for a quick settle without visible overshoot-bounce).
-      dragTransition={{ bounceStiffness: 400, bounceDamping: 24 }}
-      onDragEnd={isTop ? handleDragEnd : undefined}
-      exit={{
-        x: x.get() > 0 ? 600 : x.get() < 0 ? -600 : 0,
-        opacity: 0,
-        transition: { type: "spring", stiffness: 200, damping: 24 },
-      }}
-    >
-      <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
-        <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden">
-          {spot.photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={spot.photo_url}
-              alt={spot.name}
-              className="h-full w-full object-cover"
-              draggable={false}
-            />
-          ) : (
+    <>
+      <motion.div
+        className="absolute inset-0"
+        style={isTop ? { x, rotate } : undefined}
+        drag={isTop ? "x" : false}
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.6}
+        // Spring, not a flat power curve, for the snap-back-to-center when a
+        // drag release doesn't cross the swipe threshold — matches the feel
+        // motion-primitives' carousel uses for its own drag release (damping/
+        // stiffness tuned for a quick settle without visible overshoot-bounce).
+        dragTransition={{ bounceStiffness: 400, bounceDamping: 24 }}
+        onDragEnd={isTop ? handleDragEnd : undefined}
+        exit={{
+          x: x.get() > 0 ? 600 : x.get() < 0 ? -600 : 0,
+          opacity: 0,
+          transition: { type: "spring", stiffness: 200, damping: 24 },
+        }}
+      >
+        <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
+          <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden">
+            {spot.photo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={spot.photo_url}
+                alt={spot.name}
+                className="h-full w-full object-cover"
+                draggable={false}
+              />
+            ) : (
+              <SpotLocationPreview
+                lat={spot.lat}
+                lng={spot.lng}
+                category={spot.category}
+              />
+            )}
+            {isTop && (
+              <>
+                <motion.div
+                  style={{ opacity: skipOpacity }}
+                  className="absolute top-4 left-4 rounded-lg border-2 border-destructive px-2.5 py-1 text-sm font-semibold text-destructive"
+                >
+                  SKIP
+                </motion.div>
+                <motion.div
+                  style={{ opacity: saveOpacity }}
+                  className="absolute top-4 right-4 rounded-lg border-2 border-primary px-2.5 py-1 text-sm font-semibold text-primary"
+                >
+                  SAVE
+                </motion.div>
+              </>
+            )}
+          </div>
+          <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-4">
+            <p className="text-lg font-semibold leading-tight text-balance">
+              {spot.name}
+            </p>
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <span>{CATEGORY_META[spot.category].label}</span>
+              {distanceLabel && (
+                <>
+                  <span>·</span>
+                  <span>{distanceLabel}</span>
+                </>
+              )}
+            </div>
+
+            <div className="mt-0.5 flex flex-wrap gap-1.5">
+              {reasonChip && <Badge variant="outline">{reasonChip}</Badge>}
+              {spot.climbing_grade && (
+                <Badge variant="outline">
+                  <MountainIcon aria-hidden="true" />
+                  {spot.climbing_grade}
+                </Badge>
+              )}
+              {spot.size_class && (
+                <Badge variant="outline">
+                  <RulerIcon aria-hidden="true" />
+                  {spot.size_class}
+                </Badge>
+              )}
+              {spot.accessibility === "yes" && (
+                <Badge variant="outline">
+                  <AccessibilityIcon aria-hidden="true" />
+                  Wheelchair accessible
+                </Badge>
+              )}
+              {spot.accessibility === "limited" && (
+                <Badge variant="outline">
+                  <AccessibilityIcon aria-hidden="true" />
+                  Limited accessibility
+                </Badge>
+              )}
+              {spot.amenities?.map((amenity) => (
+                <Badge key={amenity} variant="outline">
+                  {amenity === "indoor_gym" && (
+                    <DumbbellIcon aria-hidden="true" />
+                  )}
+                  {formatAmenity(amenity)}
+                </Badge>
+              ))}
+            </div>
+
+            {spot.description && (
+              <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
+                {spot.description}
+              </p>
+            )}
+
+            <p
+              className={cn(
+                "text-xs",
+                verdict.tone === "caution"
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
+            >
+              {verdict.label}
+            </p>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-1 self-start"
+              onClick={() => setShowLocation(true)}
+            >
+              View on map
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+      {/* Popup instead of a Link to /explore — navigating away unmounted the
+          quiz's swipeQuery state entirely, so a browser-back landed on a
+          fresh homepage with no way back into the same deck. Reuses the same
+          location preview a photo-less card already shows above. */}
+      <Dialog open={showLocation} onOpenChange={setShowLocation}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{spot.name}</DialogTitle>
+          </DialogHeader>
+          <div className="h-56 w-full overflow-hidden rounded-lg">
             <SpotLocationPreview
               lat={spot.lat}
               lng={spot.lng}
               category={spot.category}
+              draggable
             />
-          )}
-          {isTop && (
-            <>
-              <motion.div
-                style={{ opacity: skipOpacity }}
-                className="absolute top-4 left-4 rounded-lg border-2 border-destructive px-2.5 py-1 text-sm font-semibold text-destructive"
-              >
-                SKIP
-              </motion.div>
-              <motion.div
-                style={{ opacity: saveOpacity }}
-                className="absolute top-4 right-4 rounded-lg border-2 border-primary px-2.5 py-1 text-sm font-semibold text-primary"
-              >
-                SAVE
-              </motion.div>
-            </>
-          )}
-        </div>
-        <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-4">
-          <p className="text-lg font-semibold leading-tight text-balance">
-            {spot.name}
-          </p>
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <span>{CATEGORY_META[spot.category].label}</span>
-            {distanceLabel && (
-              <>
-                <span>·</span>
-                <span>{distanceLabel}</span>
-              </>
-            )}
           </div>
-
-          <div className="mt-0.5 flex flex-wrap gap-1.5">
-            {reasonChip && <Badge variant="outline">{reasonChip}</Badge>}
-            {spot.climbing_grade && (
-              <Badge variant="outline">
-                <MountainIcon aria-hidden="true" />
-                {spot.climbing_grade}
-              </Badge>
-            )}
-            {spot.size_class && (
-              <Badge variant="outline">
-                <RulerIcon aria-hidden="true" />
-                {spot.size_class}
-              </Badge>
-            )}
-            {spot.accessibility === "yes" && (
-              <Badge variant="outline">
-                <AccessibilityIcon aria-hidden="true" />
-                Wheelchair accessible
-              </Badge>
-            )}
-            {spot.accessibility === "limited" && (
-              <Badge variant="outline">
-                <AccessibilityIcon aria-hidden="true" />
-                Limited accessibility
-              </Badge>
-            )}
-            {spot.amenities?.map((amenity) => (
-              <Badge key={amenity} variant="outline">
-                {amenity === "indoor_gym" && (
-                  <DumbbellIcon aria-hidden="true" />
-                )}
-                {formatAmenity(amenity)}
-              </Badge>
-            ))}
-          </div>
-
-          {spot.description && (
-            <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
-              {spot.description}
-            </p>
-          )}
-
-          <p
-            className={cn(
-              "text-xs",
-              verdict.tone === "caution"
-                ? "text-destructive"
-                : "text-muted-foreground",
-            )}
-          >
-            {verdict.label}
-          </p>
-
           <Button
             variant="outline"
-            size="sm"
             nativeButton={false}
-            className="mt-1 self-start"
             render={
-              <Link href={`/explore?${viewParams.toString()}`}>
-                View on map
-              </Link>
+              <a
+                href={directionsUrl(spot.lat, spot.lng)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Get directions
+              </a>
             }
           />
-        </div>
-      </div>
-    </motion.div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -295,12 +326,10 @@ export function SpotSwipeDeck({
   spots,
   userLocation,
   filters,
-  exploreParams,
 }: {
   spots: Spot[];
   userLocation?: { lat: number; lng: number };
   filters: MatchFilters;
-  exploreParams: string;
 }) {
   // Deck starts as the raw server-provided `spots` — matching the server
   // render exactly (SSR has no localStorage/sessionStorage access, so it
@@ -507,7 +536,6 @@ export function SpotSwipeDeck({
                     : null
                 }
                 filters={filters}
-                exploreParams={exploreParams}
                 onResolved={resolveTop}
                 isTop={i === 0}
               />

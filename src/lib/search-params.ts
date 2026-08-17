@@ -80,22 +80,3 @@ export function boundsFromSearch(parsed: ParsedSearch): {
   );
   return { center, bounds: boundingBox(center.lat, center.lng, radius) };
 }
-
-// Round-trips a parsed search back into the querystring shape /explore
-// expects, so both /swipe's full-page route and the swipe modal can build
-// their "view this spot on the map" links without re-deriving the original
-// search from scratch. Pure/isomorphic (no server-only imports), so it works
-// from a client component too.
-export function buildExploreParams(parsed: ParsedSearch): URLSearchParams {
-  const exploreParams = new URLSearchParams();
-  if (parsed.categories) exploreParams.set("cats", parsed.categories.join(","));
-  if (parsed.activity) exploreParams.set("activity", parsed.activity);
-  if (parsed.picnic) exploreParams.set("picnic", "1");
-  if (parsed.lat !== null && parsed.lng !== null) {
-    exploreParams.set("lat", String(parsed.lat));
-    exploreParams.set("lng", String(parsed.lng));
-    if (parsed.radiusMeters)
-      exploreParams.set("radius", String(parsed.radiusMeters));
-  }
-  return exploreParams;
-}
