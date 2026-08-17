@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SavedModal } from "@/components/saved-modal";
 import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
 import { CATEGORY_META } from "@/lib/categories";
 import { directionsUrl, haversineDistanceMeters } from "@/lib/geo";
@@ -278,7 +279,15 @@ const VISIBLE_STACK_DEPTH = 3;
 const INITIAL_REVEAL = 5;
 const REVEAL_STEP = 5;
 
-function SwipeNavBar({ savedCount }: { savedCount: number }) {
+function SwipeNavBar({
+  savedCount,
+  onSavedCountChange,
+}: {
+  savedCount: number;
+  onSavedCountChange: () => void;
+}) {
+  const [showSaved, setShowSaved] = useState(false);
+
   return (
     <div className="flex w-full max-w-sm items-center justify-between px-1 pt-2">
       <Link
@@ -291,8 +300,13 @@ function SwipeNavBar({ savedCount }: { savedCount: number }) {
       <span className="font-logo text-sm tracking-tight text-green-700">
         TOUCH GRASS
       </span>
-      <Link
-        href="/saved"
+      {/* Popup, not a Link to /saved — same reasoning as SwipeCard's "View
+          on map" fix: navigating away unmounted the deck entirely, so "back
+          to swiping" had nothing real to return to and fell back to a
+          generic, unscoped /swipe. */}
+      <button
+        type="button"
+        onClick={() => setShowSaved(true)}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
         <BookmarkIcon aria-hidden="true" className="size-4" />
@@ -302,7 +316,19 @@ function SwipeNavBar({ savedCount }: { savedCount: number }) {
             {savedCount}
           </span>
         )}
-      </Link>
+      </button>
+      <SavedModal
+        open={showSaved}
+        onClose={() => {
+          setShowSaved(false);
+          // The popup can remove saved spots itself (SavedList's trash
+          // button) — re-read from localStorage on close rather than
+          // threading a change callback through SavedModal/SavedList,
+          // since savedCount here is independent session state that only
+          // otherwise updates from this deck's own save/undo actions.
+          onSavedCountChange();
+        }}
+      />
     </div>
   );
 }
@@ -395,6 +421,10 @@ export function SpotSwipeDeck({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount to apply client-only storage filtering; re-running on `spots` identity would fight user-driven deck state after the first swipe.
   }, []);
 
+  function refreshSavedCount() {
+    setSavedCount(getSavedSpots().length);
+  }
+
   function resolveTop(direction: SwipeDirection) {
     const [top, ...rest] = deckRef.current;
     if (!top) return;
@@ -471,7 +501,7 @@ export function SpotSwipeDeck({
   if (deck.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-        <SwipeNavBar savedCount={savedCount} />
+        <SwipeNavBar savedCount={savedCount} onSavedCountChange={refreshSavedCount} />
         <div className="flex flex-1 flex-col items-center justify-center gap-2">
           {/* history.length === 0 here only ever means the initial pool was
               already empty — reaching this render any other way requires a
@@ -507,7 +537,7 @@ export function SpotSwipeDeck({
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 p-4">
-      <SwipeNavBar savedCount={savedCount} />
+      <SwipeNavBar savedCount={savedCount} onSavedCountChange={refreshSavedCount} />
 
       <div className="relative aspect-3/4 w-full max-w-sm">
         <AnimatePresence>
