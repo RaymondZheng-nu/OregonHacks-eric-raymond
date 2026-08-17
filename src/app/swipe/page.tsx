@@ -12,7 +12,7 @@ import {
   buildExploreParams,
   parseSearchParams,
 } from "@/lib/search-params";
-import { shuffle } from "@/lib/utils";
+import { shuffleWithPhotosFirst } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Swipe Spots",
@@ -34,11 +34,12 @@ export default async function SwipePage({
   const parsed = parseSearchParams(params);
   const hasLocation = parsed.lat !== null && parsed.lng !== null;
 
-  // No location: the questionnaire's address field is optional and its copy
-  // promises "browse spots across the whole country" on skip — a single
-  // city's bounded radius would silently break that promise, so this pulls
-  // a shuffled nationwide sample (fetchVerifiedSpotsNationwide) instead of
-  // defaulting to a fixed city.
+  // No location: the quiz itself no longer lands here with no lat/lng at all
+  // (skipping its address step now defaults to a Portland-scoped search, see
+  // session-questionnaire.tsx's PORTLAND_COORDS) — this only covers a direct
+  // /swipe visit with no params, where a genuinely nationwide sample
+  // (fetchVerifiedSpotsNationwide) is the honest fallback rather than
+  // silently defaulting to a fixed city.
   let spots;
   let userLocation: { lat: number; lng: number } | undefined;
   if (hasLocation) {
@@ -49,17 +50,21 @@ export default async function SwipePage({
       categories: parsed.categories ?? undefined,
       activity: parsed.activity,
       picnic: parsed.picnic,
+      photosFirst: true,
     });
     // Unlike the nationwide fetch below, the bounds query returns DB order
     // (most-recently-created first) — shuffle it so the deck isn't just the
-    // newest-ingested spots in a row.
-    spots = shuffle(pool);
+    // newest-ingested spots in a row. shuffleWithPhotosFirst, not a flat
+    // shuffle: the query above already weighted photo-having rows into this
+    // pool via photosFirst, and a flat shuffle would undo that.
+    spots = shuffleWithPhotosFirst(pool);
   } else {
     spots = await getVerifiedSpotsNationwide({
       limit: POOL_LIMIT,
       categories: parsed.categories ?? undefined,
       activity: parsed.activity,
       picnic: parsed.picnic,
+      photosFirst: true,
     });
   }
 

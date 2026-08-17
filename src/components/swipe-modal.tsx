@@ -8,7 +8,7 @@ import {
   buildExploreParams,
   parseSearchParams,
 } from "@/lib/search-params";
-import { shuffle } from "@/lib/utils";
+import { shuffleWithPhotosFirst } from "@/lib/utils";
 import {
   getVerifiedSpotsInBounds,
   getVerifiedSpotsNationwide,
@@ -62,20 +62,25 @@ export function SwipeModal({
           categories: parsed.categories ?? undefined,
           activity: parsed.activity,
           picnic: parsed.picnic,
+          photosFirst: true,
         });
         // Unlike the nationwide fetch below, the bounds query returns DB
         // order — shuffle it so the deck isn't just the newest-ingested
-        // spots in a row. Safe to shuffle client-side here (unlike
-        // utils.ts's shuffle doc warning about hydration mismatches): this
-        // component never renders server-side, so there's no SSR order to
-        // mismatch against.
-        spots = shuffle(pool);
+        // spots in a row. shuffleWithPhotosFirst, not a flat shuffle: the
+        // query above already weighted photo-having rows into this pool via
+        // photosFirst, and a flat shuffle would immediately undo that by
+        // remixing them back in with everything else. Safe to shuffle
+        // client-side here (unlike utils.ts's shuffle doc warning about
+        // hydration mismatches): this component never renders server-side,
+        // so there's no SSR order to mismatch against.
+        spots = shuffleWithPhotosFirst(pool);
       } else {
         spots = await getVerifiedSpotsNationwide({
           limit: POOL_LIMIT,
           categories: parsed.categories ?? undefined,
           activity: parsed.activity,
           picnic: parsed.picnic,
+          photosFirst: true,
         });
       }
 
