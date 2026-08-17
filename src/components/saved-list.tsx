@@ -7,21 +7,14 @@ import { CATEGORY_META } from "@/lib/categories";
 import { directionsUrl } from "@/lib/geo";
 import { getSavedSpots, removeSavedSpot, type SavedSpot } from "@/lib/saved-spots";
 
-// Extracted from /saved's page so the same list can render both there (a
-// real, bookmarkable route) and inside SavedModal (an in-place popup opened
-// from the homepage header or the swipe deck's nav bar) without duplicating
-// the localStorage read/remove logic twice.
+// Shared by /saved and SavedModal so the localStorage read/remove logic lives once.
 export function SavedList() {
-  // Starts empty and loads in an effect, not lazy useState(getSavedSpots) —
-  // localStorage isn't available during SSR, so reading it synchronously in
-  // render would mismatch between server and client hydration.
+  // null until the mount effect loads it — reading localStorage in render would
+  // mismatch SSR hydration.
   const [saved, setSaved] = useState<SavedSpot[] | null>(null);
 
   useEffect(() => {
-    // One-time hydration from a browser-only external system (localStorage)
-    // — not a case the "subscribe and update on change" pattern this rule
-    // wants applies to; there's no ongoing subscription to set up for a
-    // read that only needs to happen once, after mount.
+    // one-time hydration, no ongoing subscription
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSaved(getSavedSpots());
   }, []);

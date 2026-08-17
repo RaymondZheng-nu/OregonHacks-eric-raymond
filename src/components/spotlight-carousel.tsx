@@ -11,11 +11,8 @@ import type { Spot } from "@/lib/types";
 
 const AUTO_ADVANCE_MS = 5000;
 
-// Extracted so each slide's image-load failure gets its own state — photos
-// are hotlinked straight to their source (Wikimedia, etc.) with no
-// self-hosted fallback, and a dead link or a rate-limited origin previously
-// rendered as a totally blank tile with no visible alt text. Falls back to
-// the same location-preview map used for spots with no photo at all.
+// Own state per slide so one failed photo doesn't blank the tile — photos
+// hotlink to their source with no fallback. Falls back to the location preview.
 function CarouselSlideImage({
   spot,
   priority,
@@ -53,26 +50,16 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  // Mirrors `index` for the interval callback below to read without being a
-  // dependency of the effect that creates the interval — see that effect's
-  // comment for why.
+  // Lets the interval callback read the current index without depending on it.
   const indexRef = useRef(0);
   useEffect(() => {
     indexRef.current = index;
   }, [index]);
 
-  // Auto-advance by scrolling the native snap container — this doubles as
-  // the touch/trackpad swipe implementation, so there's no separate gesture
-  // handler to keep in sync with the dots.
-  //
-  // Deliberately does NOT depend on `index`: handleScroll below calls
-  // setIndex on every scroll event, including the intermediate events fired
-  // by this effect's own smooth-scrollTo (and goTo's). If `index` were a
-  // dependency, each of those intermediate updates would tear down and
-  // recreate this interval mid-transition, effectively resetting the
-  // AUTO_ADVANCE_MS countdown every time and stalling auto-advance. Reading
-  // indexRef.current inside the callback instead decouples the interval's
-  // lifetime from those scroll-driven index updates.
+  // Auto-advance by scrolling the native snap container (also the swipe impl).
+  // Not keyed on `index`: handleScroll fires setIndex during each smooth-scroll,
+  // and depending on it would rebuild the interval mid-transition and reset the
+  // countdown. Read indexRef.current instead.
   useEffect(() => {
     if (reduceMotion || paused || spots.length <= 1) return;
 
@@ -89,8 +76,7 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
     return () => clearInterval(id);
   }, [paused, reduceMotion, spots.length]);
 
-  // Keeps the dots in sync when the user swipes/scrolls manually instead of
-  // going through goTo().
+  // Keeps the dots in sync on manual swipe/scroll (not via goTo).
   function handleScroll() {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientWidth === 0) return;

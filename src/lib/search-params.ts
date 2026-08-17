@@ -7,10 +7,8 @@ import {
   type BoundingBox,
 } from "@/lib/geo";
 
-// Shared by /explore and /swipe — both pages read the same querystring
-// shape the quiz produces (cats/activity/picnic/lat/lng/radius), so parsing
-// lived in one place only from the start; this file just gives it a name
-// once a second page needed it too.
+// /explore and /swipe both read the same quiz querystring shape
+// (cats/activity/picnic/lat/lng/radius); parsing lives here for both.
 export function parseCategories(
   raw: string | undefined,
 ): SpotCategory[] | null {
@@ -40,10 +38,8 @@ export function parseSearchParams(
 ): ParsedSearch {
   const rawLat = parseNumber(params.lat);
   const rawLng = parseNumber(params.lng);
-  // Out-of-range values (bad geocode, hand-edited URL) are treated as "no
-  // location" rather than passed through — feeding boundingBox a bogus
-  // lat/lng produces a nonsensical or near-global box instead of just
-  // falling back to the default center.
+  // Out-of-range values (bad geocode, hand-edited URL) → "no location", so
+  // boundingBox falls back to the default center instead of a bogus box.
   const hasLocation =
     rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
 
@@ -57,20 +53,15 @@ export function parseSearchParams(
   };
 }
 
-// Quiz's skip-address fallback (session-questionnaire.tsx) and the density
-// view's coverage-region boxes (lib/coverage-regions.ts) both anchor on
-// this same point, rather than each guessing their own "where is Portland."
+// Shared anchor for the quiz's skip-address fallback and the coverage-region boxes.
 export const PORTLAND_CENTER = { lat: 45.5152, lng: -122.6784 };
-// Matches the map's own default center/zoom in spot-map.tsx (Portland, zoom
-// 11) so the first server-rendered paint already shows the right viewport
-// instead of fetching (and discarding) the whole table on every load.
+// Matches spot-map.tsx's default center so the first SSR paint shows the right
+// viewport instead of fetching the whole table.
 export const DEFAULT_CENTER = PORTLAND_CENTER;
 export const DEFAULT_VIEWPORT_RADIUS_METERS = 25_000;
 
-// A questionnaire-derived location narrows the initial SSR fetch to that
-// area (same bounded-fetch pattern as the plain default) — the map still
-// centers there and users can pan/zoom freely afterward, this only avoids
-// an initial empty flash while the client's own viewport fetch spins up.
+// Narrows the initial SSR fetch to the quiz location so there's no empty flash
+// before the client's own viewport fetch runs. Users can still pan freely after.
 export function boundsFromSearch(parsed: ParsedSearch): {
   center: { lat: number; lng: number };
   bounds: BoundingBox;
@@ -85,11 +76,8 @@ export function boundsFromSearch(parsed: ParsedSearch): {
   return { center, bounds: boundingBox(center.lat, center.lng, radius) };
 }
 
-// Round-trips a parsed search back into the querystring shape /explore
-// expects, so both /swipe's full-page route and the swipe modal can build
-// their "view this spot on the map" links without re-deriving the original
-// search from scratch. Pure/isomorphic (no server-only imports), so it works
-// from a client component too.
+// Round-trips a parsed search back into /explore's querystring for the "view on
+// map" links. Isomorphic (no server-only imports), usable from client components.
 export function buildExploreParams(parsed: ParsedSearch): URLSearchParams {
   const exploreParams = new URLSearchParams();
   if (parsed.categories) exploreParams.set("cats", parsed.categories.join(","));
@@ -98,9 +86,7 @@ export function buildExploreParams(parsed: ParsedSearch): URLSearchParams {
   if (parsed.lat !== null && parsed.lng !== null) {
     exploreParams.set("lat", String(parsed.lat));
     exploreParams.set("lng", String(parsed.lng));
-    // `!= null`, not truthiness — a plain `if (parsed.radiusMeters)` would
-    // silently drop an explicit radius of 0 (falsy in JS but a real value
-    // here, not "unset") from the round-tripped URL.
+    // != null, not truthiness — an explicit radius of 0 is a real value, not "unset".
     if (parsed.radiusMeters != null)
       exploreParams.set("radius", String(parsed.radiusMeters));
   }

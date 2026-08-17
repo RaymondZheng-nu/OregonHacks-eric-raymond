@@ -44,22 +44,16 @@ export function AddSpotDialog({
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  // No default category: "other" as a starting value meant most lazy
-  // submissions never touched the selector, which is exactly how "other"
-  // became one of the most common categories in the live data. Requiring an
-  // explicit pick (like the Name field already does) fixes that at the
-  // source instead of relying on submitters to notice and change it.
+  // No default: defaulting to "other" is how "other" became one of the most
+  // common categories live. Force an explicit pick.
   const [category, setCategory] = useState<SpotCategory | null>(null);
   const [locationInput, setLocationInput] = useState("");
-  // Cleared whenever locationInput changes, so a stale resolution never gets
-  // silently submitted for text the user has since edited.
+  // Cleared when locationInput changes so a stale resolution isn't submitted.
   const [resolvedLocation, setResolvedLocation] = useState<LatLng | null>(null);
   const [locating, setLocating] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  // Forces the native file input to remount on reset — its displayed
-  // filename is uncontrolled DOM state that `setPhotoFile(null)` alone
-  // doesn't clear, so without this a reopened dialog would show a stale
-  // filename next to an input the app itself considers empty.
+  // Remounts the file input on reset — its displayed filename is uncontrolled
+  // DOM state that setPhotoFile(null) doesn't clear.
   const [photoInputKey, setPhotoInputKey] = useState(0);
   const [errors, setErrors] = useState<{
     name?: string;
@@ -74,9 +68,8 @@ export function AddSpotDialog({
     if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
   }
 
-  // Address lookup and "use my location" can both be in flight at once —
-  // whichever resolves last wins, so give each attempt an id and drop
-  // callbacks that aren't the latest by the time they land.
+  // Address lookup and "use my location" can race; tag each attempt and drop
+  // stale callbacks so the latest wins.
   const locationRequestIdRef = useRef(0);
 
   async function locateFromInput() {
@@ -128,10 +121,8 @@ export function AddSpotDialog({
     e.preventDefault();
 
     const nextErrors: { name?: string; category?: string; location?: string; description?: string } = {};
-    // Same bounds insertSpot enforces server-side — checked here too so a
-    // name/description over the limit gets a specific inline message
-    // instead of surfacing only as the generic "Couldn't save that spot —
-    // try again" toast from the catch block below.
+    // Mirror insertSpot's server-side limits so an over-limit field gets a
+    // specific inline message, not just the generic save-failed toast.
     if (!name.trim()) {
       nextErrors.name = "Give this spot a name";
     } else if (name.length > MAX_NAME_LENGTH) {
@@ -142,9 +133,7 @@ export function AddSpotDialog({
       nextErrors.description = `Keep it under ${MAX_DESCRIPTION_LENGTH} characters`;
     }
 
-    // Submitting straight from a typed address (without clicking "Locate"
-    // first) is a real path, not just a fallback — resolve it here instead
-    // of forcing an extra click before every submission.
+    // Resolve a typed address on submit too, so "Locate" isn't a required click.
     let location = resolvedLocation;
     if (!location && locationInput.trim()) {
       setLocating(true);

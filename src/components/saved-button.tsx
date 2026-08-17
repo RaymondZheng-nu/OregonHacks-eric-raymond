@@ -5,11 +5,8 @@ import { BookmarkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SavedModal } from "@/components/saved-modal";
 
-// Same self-contained trigger-plus-dialog shape as AddSpotDialog, so the
-// homepage header can offer this without finishing the quiz first — that
-// used to be the only way to reach /saved at all (via the swipe deck's own
-// nav bar), which meant a saved spot from a past session was unreachable
-// without redoing the quiz just to get back to the nav bar that links to it.
+// Self-contained trigger+dialog so the homepage header can reach saved spots
+// without going through the quiz and swipe deck's nav bar.
 export function SavedButton({
   triggerSize,
 }: {

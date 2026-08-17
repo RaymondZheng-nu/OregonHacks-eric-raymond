@@ -16,9 +16,8 @@ export type MatchFilters = {
   picnic: boolean;
 };
 
-// activity_fit values with no VIBE_OPTIONS entry (climb/birdwatch are
-// deliberately category-only in the quiz, per vibes.ts — but the tagging
-// pipeline still sets them on the row, so they're worth surfacing here).
+// Labels for activity_fit values with no VIBE_OPTIONS entry (climb/birdwatch
+// are category-only in the quiz, but the pipeline still tags them on rows).
 const ACTIVITY_LABELS: Record<string, string> = {
   climb: "Climbing spot",
   birdwatch: "Birdwatching",
@@ -27,11 +26,8 @@ const ACTIVITY_LABELS: Record<string, string> = {
   sports: "Good for getting active",
 };
 
-// Standalone "why this result exists at all" chip — pulled out of
-// getMatchChips so callers with their own badge layout (the swipe deck
-// already renders climbing_grade/size_class/accessibility/amenities badges)
-// can prepend just the match reason instead of getting a redundant
-// size_class chip mixed in.
+// The "why this matched" chip, split out of getMatchChips so callers with their
+// own badge layout (the swipe deck) can prepend just this one.
 export function getMatchReasonChip(
   spot: Pick<Spot, "category" | "activity_fit" | "size_class">,
   filters: MatchFilters,
@@ -55,10 +51,8 @@ export function getMatchReasonChip(
   return null;
 }
 
-// Every chip traces to a real column already on the row — same no-fabrication
-// rule spot-verdict.ts follows. Capped at a handful of chips: judges get
-// about two minutes per team, so this favors "why this matched" over an
-// exhaustive tag dump.
+// Every chip traces to a real column on the row (no fabrication). Capped at 4,
+// favoring "why this matched" over an exhaustive tag dump.
 export function getMatchChips(
   spot: Spot & { distanceMeters: number | null },
   filters: MatchFilters,

@@ -100,6 +100,77 @@ function extractClimbingGrade(tags = {}) {
   );
 }
 
+// Photo resolution, inline at insert time — same logic as
+// backfill-photos.mjs's resolveCandidate/isRealImage, just applied as
+// elements come in rather than as a separate pass over already-inserted
+// rows. Never fabricated: every URL is checked live for a real image
+// response before being written. A miss here just leaves photo_url null,
+// same as most rows already have — not worth retrying, this isn't the
+// only chance a row gets (backfill-photos.mjs can still catch it later).
+const IMAGE_EXTENSION_RE = /\.(jpe?g|png|gif|webp)(?:[?#].*)?$/i;
+const PHOTO_FETCH_TIMEOUT_MS = 8_000;
+
+function commonsFilePathUrl(filename) {
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=1024`;
+}
+
+async function isRealImage(url) {
+  try {
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      headers: { "User-Agent": "NearbyNature/1.0 (OregonHacks hackathon project)" },
+      signal: AbortSignal.timeout(PHOTO_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return false;
+    return (res.headers.get("content-type") ?? "").startsWith("image/");
+  } catch {
+    return false;
+  }
+}
+
+async function resolveWikipediaImage(tagValue) {
+  const match = /^([a-z-]+):(.+)$/.exec(tagValue);
+  const lang = match ? match[1] : "en";
+  const title = match ? match[2] : tagValue;
+  try {
+    const res = await fetch(
+      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+      {
+        headers: { "User-Agent": "NearbyNature/1.0 (OregonHacks hackathon project)" },
+        signal: AbortSignal.timeout(PHOTO_FETCH_TIMEOUT_MS),
+      },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    // thumbnail, not originalimage — Wikimedia's CDN 429s automated
+    // clients requesting the unscaled original (confirmed live).
+    return data.thumbnail?.source ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePhotoUrl(tags = {}) {
+  let candidate = null;
+
+  if (tags.image) {
+    if (IMAGE_EXTENSION_RE.test(tags.image)) {
+      candidate = tags.image;
+    } else {
+      const fileMatch = /commons\.wikimedia\.org\/wiki\/(File:.+)$/.exec(tags.image);
+      candidate = fileMatch ? commonsFilePathUrl(decodeURIComponent(fileMatch[1])) : null;
+    }
+  } else if (tags.wikimedia_commons?.startsWith("File:")) {
+    candidate = commonsFilePathUrl(tags.wikimedia_commons.slice("File:".length));
+  } else if (tags.wikipedia) {
+    candidate = await resolveWikipediaImage(tags.wikipedia);
+  }
+
+  if (!candidate) return null;
+  return (await isRealImage(candidate)) ? candidate : null;
+}
+
 function mapCategory(tags = {}) {
   if (tags.sport === "climbing") return "climbing";
   if (tags.amenity === "bird_hide" || tags.leisure === "bird_hide") return "birdwatching";
@@ -310,6 +381,10 @@ async function main() {
     // as scripts/backfill-area.mjs) can pick up rows inserted in the
     // meantime — computing area here and discarding it costs nothing today.
     const climbingGrade = category === "climbing" ? extractClimbingGrade(element.tags) : null;
+    // Only ~3.8% of OSM elements carry a resolvable image/wikimedia_commons/
+    // wikipedia tag (checked live against the table), so this rarely fires —
+    // the per-element latency cost is contained to that slice.
+    const photoUrl = await resolvePhotoUrl(element.tags);
     const basePayload = {
       name,
       description: element.tags?.description ?? null,
@@ -318,7 +393,7 @@ async function main() {
       status: "verified",
       lat: coords.lat,
       lng: coords.lng,
-      photo_url: null,
+      photo_url: photoUrl,
       external_id: `${element.type}/${element.id}`,
     };
     const includeClimbingGrade = climbingGrade !== null && !climbingGradeColumnMissing;

@@ -29,15 +29,11 @@ export function ReviewSpotActions({ spotId }: { spotId: string }) {
   const [confirmed, setConfirmed] = useState(false);
   const [flagged, setFlagged] = useState(false);
   const [submitting, setSubmitting] = useState<"confirm" | "flag" | null>(null);
-  // Guards against double-submission in the brief window between mount and
-  // the localStorage check below resolving — both buttons stay disabled
-  // until hydration for this specific spotId has actually completed.
+  // Keeps both buttons disabled until the localStorage check below resolves.
   const [hydrated, setHydrated] = useState(false);
 
-  // Server-rendered HTML always has confirmed/flagged=false (no window/
-  // localStorage on the server) — reading localStorage must happen
-  // post-mount, not during the lazy initializer, or client/server output
-  // mismatches and React throws a hydration error.
+  // Read localStorage post-mount, not in a lazy initializer — the server has
+  // none, so a synchronous read would mismatch hydration.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfirmed(getIds(CONFIRMED_KEY).includes(spotId));

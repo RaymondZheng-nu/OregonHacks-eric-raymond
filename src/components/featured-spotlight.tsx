@@ -12,11 +12,8 @@ import { getSpotVerdict } from "@/lib/spot-verdict";
 import { cn } from "@/lib/utils";
 import type { Spot } from "@/lib/types";
 
-// Extracted so each card's image-load failure gets its own state — photos
-// are hotlinked straight to their source (Wikimedia, etc.) with no
-// self-hosted fallback, and a dead link or a rate-limited origin previously
-// rendered as a totally blank tile with no visible alt text. Falls back to
-// the same location-preview map used for spots with no photo at all.
+// Own state per card so one failed photo doesn't blank the tile — photos
+// hotlink to their source with no fallback. Falls back to the location preview.
 function FeaturedSpotlightImage({ spot }: { spot: Spot }) {
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -63,12 +60,8 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
               ease: [0.16, 1, 0.3, 1],
             }}
           >
-            {/* Was hover:shadow-md/hover:ring styling on the Card with no
-                href/onClick anywhere — implied clickability with no
-                affordance behind it. Links to /explore focused on this
-                spot, the same pattern spot-swipe-deck.tsx's "View on map"
-                already uses. `block` so the anchor doesn't collapse to its
-                inline content width/height inside the motion.div. */}
+            {/* Links to /explore focused on this spot. `block` so the anchor
+                doesn't collapse to its inline size inside the motion.div. */}
             <Link
               href={`/explore?spot=${spot.id}&lat=${spot.lat}&lng=${spot.lng}`}
               className="block"
@@ -79,12 +72,9 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
             >
               <div className="relative aspect-4/3 w-full overflow-hidden rounded-t-xl">
                 <FeaturedSpotlightImage spot={spot} />
-                {/* Only the two signal-bearing tones get a badge — the common
-                    zero-votes case stays visually clean, no room here for the
-                    full verdict sentence used elsewhere (map popup, results,
-                    carousel), so this is a compact icon+count instead.
-                    z-[1001] keeps it above the location-preview map's own
-                    panes/controls when there's no photo. */}
+                {/* Only positive/caution get a badge; neutral stays clean.
+                    Compact icon+count, not the full verdict sentence.
+                    z-[1001] keeps it above the location-preview map's panes. */}
                 {verdict.tone !== "neutral" && (
                   <div
                     className={cn(

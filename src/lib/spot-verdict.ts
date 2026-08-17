@@ -5,9 +5,7 @@ export type SpotVerdict = {
   tone: "positive" | "neutral" | "caution";
 };
 
-// Framed only from real confirm_count/flag_count already on the row — same
-// no-fabrication rule spotlight-carousel's old spotlightReason() documented
-// (this supersedes it). Never a synthesized "reviews say..." claim.
+// Framed only from real confirm_count/flag_count — never a synthesized claim.
 export function getSpotVerdict(spot: Spot): SpotVerdict {
   const { confirm_count, flag_count } = spot;
 

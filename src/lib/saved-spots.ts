@@ -1,8 +1,6 @@
 import type { Spot, SpotCategory } from "@/lib/types";
 
-// No auth in this app (see AGENTS.md/schema.sql's RLS-disabled note) — saved
-// spots are a local snapshot on this device/browser, never written to the
-// spots table or tied to any account.
+// No auth in this app — saved spots live in this browser only, never in the DB.
 export type SavedSpot = {
   id: string;
   name: string;
@@ -14,21 +12,12 @@ export type SavedSpot = {
 };
 
 const SAVED_KEY = "touch-grass:saved-spots";
-// sessionStorage, not localStorage: skips are meant to reset every session
-// ("never show again this session," not "forever") — a different lifetime
-// than saved spots, so a different storage API rather than one key with a
-// manual expiry.
+// sessionStorage, not localStorage: skips reset each session, unlike saved spots.
 const SKIPPED_KEY = "touch-grass:skipped-spots";
 
-// Both real call sites (getSavedSpots, getSkippedSpotIds) always pass an
-// array fallback and expect an array back — so Array.isArray is a real
-// shape check here, not just a parse check. Without it, valid-but-wrong-
-// shaped JSON under this key (e.g. a stale/foreign value from a past schema,
-// or a collision with something else writing to localStorage) would parse
-// successfully, get cast to T, and only blow up later when a caller like
-// saveSpot calls `.some(...)` on what turned out to be `{}` — an uncaught
-// TypeError, exactly the kind of storage-corruption crash this function's
-// own comment claims to guard against but previously didn't.
+// Array.isArray is a real shape check, not just a parse guard: wrong-shaped JSON
+// under this key would cast to T and only blow up later when a caller does
+// `.some(...)` on what's actually an object.
 function readJson<T>(storage: Storage, key: string, fallback: T): T {
   try {
     const raw = storage.getItem(key);
@@ -36,25 +25,17 @@ function readJson<T>(storage: Storage, key: string, fallback: T): T {
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as T) : fallback;
   } catch {
-    // Corrupted/foreign data under this key shouldn't break the feature —
-    // same soft-fail-to-default convention as the rest of this app's reads.
     return fallback;
   }
 }
 
-// Writes can throw too (QuotaExceededError, private-browsing storage
-// restrictions in some browsers) — reads were already defensively wrapped
-// above, but every write call site previously called setItem bare. Given
-// this file's own stated philosophy ("shouldn't break the feature"), an
-// uncaught write failure from inside a swipe-deck save/skip button handler
-// contradicts that; this makes a failed write a silent no-op instead of an
-// uncaught exception.
+// setItem can throw (quota, private-browsing lockout) — make a failed write a
+// silent no-op instead of crashing a swipe-deck save/skip handler.
 function writeJson(storage: Storage, key: string, value: unknown): boolean {
   try {
     storage.setItem(key, JSON.stringify(value));
     return true;
   } catch {
-    // quota exceeded or private-browsing storage lockout — caller decides what to do
     return false;
   }
 }
@@ -64,10 +45,8 @@ export function getSavedSpots(): SavedSpot[] {
   return readJson(window.localStorage, SAVED_KEY, []);
 }
 
-// Returns whether this call actually inserted a new saved spot (false for an
-// already-saved id, a no-op). Callers that track undo history need this: an
-// unconditional "this was saved, so undo should remove it" would delete a
-// spot that was really saved in an earlier session, not by this call.
+// Returns true only if this call inserted a new spot (false if already saved).
+// Undo history needs this so it doesn't remove a spot saved in an earlier session.
 export function saveSpot(spot: Spot): boolean {
   if (typeof window === "undefined") return false;
   const existing = getSavedSpots();
@@ -106,9 +85,6 @@ export function skipSpot(id: string): void {
   writeJson(window.sessionStorage, SKIPPED_KEY, Array.from(existing));
 }
 
-// Undo for the swipe deck's "back" button — reverses whichever of
-// skipSpot/saveSpot was just called, so a misswipe isn't permanent for the
-// rest of the session.
 export function unskipSpot(id: string): void {
   if (typeof window === "undefined") return;
   const next = getSkippedSpotIds();

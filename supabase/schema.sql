@@ -13,102 +13,62 @@ create table if not exists spots (
   created_at timestamptz not null default now()
 );
 
--- Added for ingestion sources (OSM, open-data portals): each source's native ID,
--- so re-running an ingestion job is idempotent via `upsert(..., { onConflict })`
--- against the unique index below, instead of fragile check-then-insert logic.
+-- Source's native ID, so re-running an ingestion job is idempotent via
+-- upsert onConflict against the unique index below.
 alter table spots add column if not exists external_id text;
 
--- Added for the data-quality cleanup pass (junk-sized spots + nested
--- duplicates like Brooklyn Botanic Garden's ~20 separate sub-garden pins).
--- All nullable/additive, same precedent as external_id above.
+-- Cleanup-pass columns (junk-sized spots + nested dedup). All nullable/additive.
 --
--- area_m2: computed footprint for way/relation-derived OSM rows, used to
--- distinguish a real visitable green space from a street planter or median.
--- Null means "no area data" (node-derived, a non-OSM source, or not yet
--- backfilled) — always exempt from the size filter, not treated as zero.
+-- area_m2: footprint for way/relation OSM rows, to tell a real green space from
+-- a planter. Null = "no area data" — always exempt from the size filter, not zero.
 alter table spots add column if not exists area_m2 double precision;
--- features: for a parent spot that absorbed nested sub-features, their
--- names (e.g. Brooklyn Botanic Garden -> {"Rose Garden","Cherry Esplanade"})
--- — so that information is preserved instead of lost when the children are
--- hidden from the map via status='merged'.
+-- features: sub-feature names a parent absorbed, kept so they survive the
+-- children being hidden via status='merged'.
 alter table spots add column if not exists features text[];
--- merged_into: for a child row collapsed into a parent, the parent's id.
--- Kept as an audit trail rather than deleting the row outright — a bad
--- merge is reversible with a single UPDATE (status='verified', merged_into
--- = null) instead of requiring a restore from backup.
+-- merged_into: parent id for a collapsed child. Audit trail — a bad merge is
+-- reversible with one UPDATE instead of a backup restore.
 alter table spots add column if not exists merged_into uuid references spots(id);
 
--- Tag schema, added alongside the cleanup pass so recategorized spots are
--- findable/filterable instead of just hidden. Every field is either a
--- direct measurement (size_class, from area_m2) or a direct 1:1 OSM tag
--- mapping (amenities, accessibility) — nothing here is inferred beyond
--- activity_fit's documented size-default-with-tag-override, and nothing is
--- fabricated. No 'mood' column: no real data source exists for it yet.
+-- Tag columns. Each is a direct measurement or 1:1 OSM tag mapping — nothing
+-- fabricated. No 'mood' column: no data source for it yet.
 --
--- size_class: 'small' | 'medium' | 'large', computed from area_m2 against
--- per-category bands. Null when area_m2 is unknown — an honest "can't
--- classify," not a guess.
+-- size_class: small|medium|large from area_m2 per-category bands. Null when
+-- area_m2 is unknown, an honest "can't classify."
 alter table spots add column if not exists size_class text;
--- activity_fit: e.g. {climb} | {birdwatch} | {lounge} | {walk} | {walk,sports}.
--- Defaults from size_class (a real measurement), overridden by real OSM
--- tags where they'd contradict it (a tagged nature_reserve never implies
--- "sports" regardless of size; a tagged playground/sport always does).
+-- activity_fit: defaults from size_class, overridden by OSM tags that contradict
+-- it (a tagged nature_reserve never implies "sports"; a playground always does).
 alter table spots add column if not exists activity_fit text[];
--- amenities: e.g. {water_feature,open_lawn}, straight from OSM tags present
--- on the element itself. Sparse by design — benches/restrooms are almost
--- always separate point features inside a polygon in OSM, not tags on the
--- polygon, so this stays null for most rows. Never fabricated.
+-- amenities: OSM tags on the element itself. Sparse — benches/restrooms are
+-- usually separate point features in OSM, not tags on the polygon.
 alter table spots add column if not exists amenities text[];
--- accessibility: OSM's own wheelchair=yes/no/limited tag verbatim when
--- present, else null. Never inferred from anything else.
+-- accessibility: OSM's wheelchair=yes/no/limited verbatim, else null.
 alter table spots add column if not exists accessibility text;
 
--- climbing_grade: raw grade string straight from OSM (climbing:grade:french,
--- climbing:grade:yds, or bare climbing:grade — whichever tag is present,
--- preferred in that order). Deliberately not normalized to one scale: French
--- sport grades and YDS aren't a clean 1:1 mapping, and inventing a
--- conversion here would assert precision the source data doesn't have.
--- Null means "no grade tagged in OSM," not "ungraded" or "easiest."
+-- climbing_grade: raw OSM grade string (french, yds, or bare — in that order).
+-- Not normalized: French and YDS aren't a clean 1:1, so converting would fake
+-- precision the source lacks. Null = "no grade tagged," not "easiest."
 alter table spots add column if not exists climbing_grade text;
 
 create index if not exists spots_category_idx on spots (category);
 
--- spots_status_idx (status) is superseded by spots_status_lat_lng_idx below,
--- whose leading column is also `status` — any query the single-column index
--- served can use the composite index's prefix instead, so keeping both would
--- just be two B-trees to maintain on every write for no read benefit.
+-- Superseded by spots_status_lat_lng_idx below (same leading column), so drop
+-- it — keeping both is two B-trees to maintain for no read benefit.
 drop index if exists spots_status_idx;
 
--- Plain unique index, not partial: Postgres already treats NULL as distinct
--- from other NULLs in a unique index, so existing rows with external_id=NULL
--- (all user submissions) never conflict with each other regardless. A partial
--- index here would additionally break upsert's onConflict target, since it
--- can't express the partial predicate as an inference clause.
+-- Plain unique index, not partial: Postgres treats NULLs as distinct, so the
+-- external_id=NULL user rows never conflict. A partial index would also break
+-- upsert's onConflict target (can't express the predicate as an inference clause).
 drop index if exists spots_source_external_id_key;
 create unique index if not exists spots_source_external_id_key
   on spots (source, external_id);
 
--- Status transition gated to `status = 'pending'`, mirroring flag_spot below:
--- without this, confirm_spot had no status check at all, so anon-key spam
--- could flip an already-`rejected` spot back to `verified`, or a `merged`
--- child (whose merged_into still points at its parent) back to `verified`
--- too — producing a duplicate visible pin in a state the app never
--- otherwise creates. confirm_count still increments unconditionally,
--- matching flag_count's own design (both stay meaningful as display counts
--- past the status-deciding threshold).
--- security definer + fixed search_path: this function now needs to UPDATE
--- `spots` even after anon's own direct UPDATE grant is revoked below (see
--- the revoke statement near the end of this file) — invoker-security (the
--- implicit default) would otherwise start failing for anon callers the
--- moment that revoke takes effect, since it runs with the *caller's*
--- privileges. Definer-security runs as this function's owner instead,
--- letting anon mutate `spots` only through this narrow, status-gated
--- interface rather than via an open table grant. `set search_path = public`
--- pins name resolution so a caller can't hijack it by defining an
--- identically-named object earlier in their own search_path.
--- threshold is NOT a parameter — it used to be, but that let any anon caller
--- hit the RPC directly with threshold=0 and instantly verify (or, on
--- flag_spot, reject) any pending spot in one call. Fixed at 2 inline instead.
+-- Status gated to 'pending' so anon spam can't flip a rejected/merged spot back
+-- to verified. confirm_count still increments unconditionally (a display count).
+-- security definer + fixed search_path: this must keep UPDATE-ing spots after
+-- anon's direct UPDATE grant is revoked below, running as owner through this
+-- narrow status-gated interface. search_path pins name resolution against hijack.
+-- threshold is hardcoded at 2, not a param — as a param, anon could call with
+-- threshold=0 and instantly verify any pending spot.
 create or replace function confirm_spot(spot_id uuid)
 returns void as $$
   update spots
@@ -120,19 +80,13 @@ returns void as $$
   where id = spot_id;
 $$ language sql security definer set search_path = public;
 
--- Added so /pending has a way to say a submission looks fake/junk, not just
--- confirm. Every spot's own flag report count, surfaced in the crowd verdict
--- blurb (src/lib/spot-verdict.ts) on verified spots too.
+-- flag_count: report count for /pending, also shown in the verdict blurb.
 alter table spots add column if not exists flag_count integer not null default 0;
 
--- Mirrors confirm_spot: a threshold-based anon vote, no auth required. Only
--- auto-transitions status when the spot is still pending — a verified spot
--- accumulates flag_count for display (see spot-verdict.ts) but is never
--- auto-hidden by it, since anon flags on an already-live spot are a
--- griefing vector with no auth to stop them.
--- security definer + fixed search_path: same reasoning as confirm_spot
--- above — needs to keep UPDATE-ing `spots` under its own privileges once
--- anon's direct UPDATE grant is revoked below.
+-- Mirrors confirm_spot. Only auto-rejects a still-pending spot; a verified spot
+-- accrues flag_count for display but is never auto-hidden (anon flags on a live
+-- spot are a griefing vector with no auth to stop them).
+-- security definer + fixed search_path: same reasoning as confirm_spot.
 create or replace function flag_spot(spot_id uuid)
 returns void as $$
   update spots
@@ -141,40 +95,27 @@ returns void as $$
   where id = spot_id;
 $$ language sql security definer set search_path = public;
 
--- Speeds up the viewport bounding-box filter (status + lat/lng range) used by
--- both the map's in-bounds query and the ingestion scripts' proximity dedup
--- check. Without this, those queries fall back to a full scan of every
--- verified row on every request as the table keeps growing.
+-- Serves the viewport bbox filter (status + lat/lng) for the map query and the
+-- ingestion dedup check, which would otherwise full-scan every verified row.
 create index if not exists spots_status_lat_lng_idx on spots (status, lat, lng);
 
--- amenities/activity_fit are filtered via .overlaps() in queries.ts (the
--- Postgres `&&` array-overlap operator), which a plain btree can't support
--- at all — without a GIN index, every Advanced Filter combo that touches
--- either column falls back to a full sequential scan of the matching-status
--- rows. Cheap to add now, before ingestion grows the table further; harmless
--- if these filters end up lightly used.
+-- GIN indexes for the .overlaps() (&&) array filters on amenities/activity_fit,
+-- which a btree can't serve at all — without these, every Advanced Filter combo
+-- touching them does a sequential scan.
 create index if not exists spots_amenities_gin_idx on spots using gin (amenities);
 create index if not exists spots_activity_fit_gin_idx on spots using gin (activity_fit);
 
--- Zoomed-out map views: instead of shipping every spot's full row (or even
--- just lat/lng) to the client, bucket verified spots into a coarse lat/lng
--- grid server-side and return one row per bucket with its count. Payload
--- size is bounded by grid resolution, not by how many rows are in `spots`,
--- so this stays cheap no matter how much ingestion grows the table.
+-- Zoomed-out views: bucket verified spots into a coarse lat/lng grid server-side
+-- and return one row per bucket with its count. Payload scales with grid
+-- resolution, not table size.
 create or replace function spot_density_grid(
   min_lat double precision,
   max_lat double precision,
   min_lng double precision,
   max_lng double precision,
   grid_size double precision default 0.05,
-  -- Optional: restricts counted spots to this category set. Added so the
-  -- density view can count only 'park'/'garden'/'tree'/'birdwatching' (the
-  -- categories fetchSpotDensity in queries.ts actually passes) instead of
-  -- every verified spot regardless of category — this RPC's original form
-  -- counted 'abandoned'/'hangout' rows too, which aren't green space, and
-  -- 'other'/'climbing' rows the density view can't defend as green space
-  -- either. Null (the default) keeps this RPC's original all-categories
-  -- behavior for any other caller.
+  -- Optional category filter so the density view counts only green-space
+  -- categories, not every verified spot. Null keeps all-categories behavior.
   categories text[] default null
 )
 returns table (lat double precision, lng double precision, count bigint)
@@ -182,43 +123,26 @@ language plpgsql
 stable
 as $$
 begin
-  -- Same anon-reachability concern as the grid_size floor below: `limit`
-  -- only caps the aggregated *output*, not the scan+group-by cost that
-  -- happens before it. A world-sized bounds request would still force a
-  -- full scan of every verified row on each call. The previous 20-degree
-  -- cap was wrong for this app specifically: this is a USA-wide product
-  -- (see README), and CONUS alone spans ~58 degrees of longitude (Pacific
-  -- coast to Maine) — so zooming out to see the whole country (a real,
-  -- intended use, not abuse) always exceeded 20 and silently broke the
-  -- heatmap with a 400 the UI only logged to the console. 70 degrees
-  -- comfortably covers a full CONUS-width viewport with margin while still
-  -- rejecting anything approaching true global scale (180+ degrees) — the
-  -- cost profile barely changes versus 20 in practice, since a CONUS-wide
-  -- query already scans essentially the same `verified` rows a 20-degree
-  -- regional query over the densest part of the country would.
+  -- Cap the scan cost (limit only caps output, not the scan+group-by before it).
+  -- 70 degrees, not the old 20: CONUS spans ~58deg of longitude, so a whole-country
+  -- zoom-out (intended use) exceeded 20 and silently 400'd the heatmap. 70 covers
+  -- CONUS with margin while still rejecting true global scale.
   if (max_lat - min_lat) > 70 or (max_lng - min_lng) > 70 then
     raise exception 'bounds span too large: max 70 degrees per axis';
   end if;
 
   return query
-    -- Floored at 0.005 degrees (~500m): this RPC is reachable directly with
-    -- the anon key (no RLS on this table), so grid_size can't be trusted as
-    -- given. Unfloored, 0 divides by zero and a near-zero value produces
-    -- close to one bucket per row, defeating the bounded-payload guarantee
-    -- this function exists for. `limit` below is a second, independent cap.
+    -- Floor grid_size at 0.005deg (~500m): anon-reachable and untrusted, so 0
+    -- would divide-by-zero and a tiny value gives ~one bucket per row, defeating
+    -- the bounded payload. `limit` below is a second cap.
     select
       round(spots.lat / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lat,
       round(spots.lng / greatest(grid_size, 0.005)) * greatest(grid_size, 0.005) as lng,
       count(*) as count
     from spots
     where status = 'verified'
-      -- Qualified as spots.lat/spots.lng: this function's own OUT parameters
-      -- are also named lat/lng (see `returns table` above), so a bare
-      -- reference here is ambiguous between the column and the OUT param —
-      -- Postgres rejects it at call time with "column reference is ambiguous",
-      -- which silently broke every heatmap request since this function's
-      -- introduction (the client swallows the error and just keeps showing
-      -- the last successful markers-mode count).
+      -- Must qualify spots.lat/lng — the OUT params are also named lat/lng, and
+      -- a bare reference is ambiguous, which silently 400'd every heatmap request.
       and spots.lat between min_lat and max_lat
       and spots.lng between min_lng and max_lng
       and (categories is null or spots.category = any(categories))
@@ -227,10 +151,8 @@ begin
 end;
 $$;
 
--- Storage bucket for spot photos. Deterministic: always ends up public,
--- regardless of whether it already existed in some other state. Capped at
--- 5MB and image mime types only — anon insert policy below has no other
--- upload restriction, so this is the only backstop against abuse.
+-- Spot-photos bucket. Idempotently ends up public, 5MB cap, image mime types
+-- only — the only upload restriction, since the anon insert policy has none.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('spot-photos', 'spot-photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 on conflict (id) do update set
@@ -238,9 +160,8 @@ on conflict (id) do update set
   file_size_limit = 5242880,
   allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
--- Storage policies: create-if-missing via exception handling, never drop-then-create.
--- A drop+create would momentarily remove the policy inside the same statement batch;
--- this way there is no window where the policy is absent.
+-- Create-if-missing, not drop-then-create, so there's no window where the
+-- policy is absent.
 do $$
 begin
   create policy "Public read spot-photos" on storage.objects
@@ -257,17 +178,54 @@ exception
   when duplicate_object then null;
 end $$;
 
--- RLS is intentionally left disabled on `spots`: there is no auth in this app, so the
--- browser (anon key) inserts/selects/rpcs directly against this table with no session.
--- Enabling RLS here without matching policies would silently break anonymous submission
--- and confirmation. If auth is added post-hackathon, replace this line with real policies.
+-- RLS stays off: no auth, so the anon key reads/writes directly. Enabling it
+-- without policies would break anonymous submission. Add real policies if auth lands.
 alter table spots disable row level security;
 
--- Every legitimate anon write goes through insertSpot (INSERT) or the
--- confirm_spot/flag_spot RPCs above — nothing in the app ever needs anon to
--- UPDATE or DELETE `spots` rows directly via PostgREST. Supabase's default
--- anon grants are broad enough to allow exactly that (e.g. an arbitrary
--- `.update({status:'rejected'}).eq('id', anyId)` from the browser), so this
--- explicitly closes off unused attack surface with zero behavior change to
--- any real code path. SELECT/INSERT stay open — both are load-bearing.
+-- Anon writes only go through INSERT and the confirm/flag RPCs, so close off the
+-- default UPDATE/DELETE grants (an arbitrary .update({status:'rejected'}) from the
+-- browser). SELECT/INSERT stay open — both are load-bearing.
 revoke update, delete on spots from anon;
+
+-- Reddit citation, attached to an existing spot by scripts/ingest-reddit-citations.mjs
+-- (service-role writes only — anon never writes these directly, hence no RPC).
+-- A real permalink + the post's own title, never a synthesized quote.
+alter table spots add column if not exists reddit_citation_url text;
+alter table spots add column if not exists reddit_citation_snippet text;
+alter table spots add column if not exists reddit_citation_subreddit text;
+
+-- Community-reported "free things to do" tips, same pending/verified +
+-- confirm_count moderation shape already proven on spots — reused rather
+-- than inventing a second mechanism. spot_id is nullable so a tip that's
+-- more "this city has free rowing Saturdays" than tied to one exact pin
+-- still has somewhere to live.
+create table if not exists free_activity_tips (
+  id uuid primary key default gen_random_uuid(),
+  spot_id uuid references spots(id),
+  tip text not null,
+  source_url text,
+  status text not null default 'pending', -- 'pending' | 'verified' | 'rejected'
+  confirm_count integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists free_activity_tips_spot_id_idx on free_activity_tips (spot_id);
+
+alter table free_activity_tips disable row level security;
+
+-- Mirrors confirm_spot: security definer + fixed search_path so this keeps
+-- working after anon's UPDATE grant is revoked below. Threshold hardcoded
+-- at 2 for the same reason (a param would let anon self-verify with 0).
+create or replace function confirm_tip(tip_id uuid)
+returns void as $$
+  update free_activity_tips
+  set confirm_count = confirm_count + 1,
+      status = case
+        when status = 'pending' and confirm_count + 1 >= 2 then 'verified'
+        else status
+      end
+  where id = tip_id;
+$$ language sql security definer set search_path = public;
+
+-- Same reasoning as spots above: anon writes go through INSERT + confirm_tip only.
+revoke update, delete on free_activity_tips from anon;

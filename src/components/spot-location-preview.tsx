@@ -8,11 +8,9 @@ import { markerIcon } from "@/lib/leaflet-marker";
 import type { SpotCategory } from "@/lib/types";
 
 const PREVIEW_ZOOM = 15;
-// These embed inside things that animate open (the results Dialog scales in
-// from 95%, per dialog.tsx's duration-100 transition) — Leaflet measures its
-// container's size once at mount, and mounting mid-animation means it can
-// measure the wrong (sometimes zero) size and never fetch any tiles, leaving
-// a blank color block. invalidateSize() after the animation settles fixes it.
+// These embed inside dialogs that animate open. Leaflet measures its container
+// once at mount, so mounting mid-animation reads the wrong (often zero) size and
+// never fetches tiles. invalidateSize() after the animation settles fixes it.
 const INVALIDATE_DELAY_MS = 300;
 
 function InvalidateSizeOnMount() {
@@ -24,12 +22,9 @@ function InvalidateSizeOnMount() {
   return null;
 }
 
-// react-leaflet only reads MapContainer's `center`/`zoom` props once, at
-// construction — they're not reactive like a normal controlled prop. The
-// results popup reuses a single SpotLocationPreview instance while paging
-// through spots (only lat/lng change underneath it), so without this the
-// view stayed stuck on whichever spot happened to be first, even though
-// the Marker itself (a genuinely reactive react-leaflet component) moved.
+// MapContainer reads center/zoom only at construction, not reactively. This
+// instance is reused as lat/lng change, so recenter imperatively or the view
+// stays stuck on the first spot while only the Marker moves.
 function RecenterOnChange({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap();
   useEffect(() => {
@@ -38,14 +33,9 @@ function RecenterOnChange({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
-// Interactive-but-locked fallback for a spot with no real photo — a small
-// live map centered on the spot instead of a flat color tile, so "no photo"
-// still shows something real. Dragging is off by default: this is a location
-// preview anchored to one point, not a browsable map, and letting it pan
-// makes it feel like a broken/empty void once you've dragged the pin out of
-// view. Zoom (+/- control, pinch) still works. Scroll-zoom is off everywhere
-// since these embed inside scrollable cards/carousels — a wheel event over
-// the map shouldn't hijack the page scroll.
+// Small live map fallback for a photo-less spot. Dragging off by default (it's
+// a preview anchored to one point, not a browsable map); scroll-zoom off
+// everywhere so a wheel event doesn't hijack the surrounding card's scroll.
 export function SpotLocationPreview({
   lat,
   lng,
