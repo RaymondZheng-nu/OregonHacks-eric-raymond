@@ -21,6 +21,7 @@ import {
   DumbbellIcon,
   TicketIcon,
   Share2Icon,
+  ChevronUpIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,167 @@ const SWIPE_VELOCITY_THRESHOLD = 500;
 function formatAmenity(amenity: string): string {
   if (amenity === "indoor_gym") return "Indoor gym";
   return amenity.replace(/_/g, " ");
+}
+
+function useSpotTips(spotId: string | undefined): FreeActivityTip[] {
+  const [tips, setTips] = useState<FreeActivityTip[]>([]);
+  useEffect(() => {
+    if (!spotId) {
+      setTips([]);
+      return;
+    }
+    let cancelled = false;
+    getVerifiedTips(spotId).then((result) => {
+      if (!cancelled) setTips(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spotId]);
+  return tips;
+}
+
+// Extra detail that doesn't fit the compact swipe card — full description,
+// a small map, and the full tip list with source links (the card only shows
+// tip text as a badge). Desktop has the room to show this beside the card at
+// all times; mobile gets it as a drag-up sheet instead (see MobileDetailSheet).
+function SpotDetailPanel({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }) {
+  const verdict = getSpotVerdict(spot);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold leading-tight text-balance">
+          {spot.name}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {CATEGORY_META[spot.category].label}
+        </p>
+      </div>
+      <div className="h-36 w-full overflow-hidden rounded-lg">
+        <SpotLocationPreview
+          lat={spot.lat}
+          lng={spot.lng}
+          category={spot.category}
+        />
+      </div>
+      {spot.description && (
+        <p className="text-sm text-muted-foreground">{spot.description}</p>
+      )}
+      <p
+        className={cn(
+          "text-xs",
+          verdict.tone === "caution"
+            ? "text-destructive"
+            : "text-muted-foreground",
+        )}
+      >
+        {verdict.label}
+      </p>
+      {spot.reddit_citation_url && (
+        <a
+          href={spot.reddit_citation_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-xs text-muted-foreground underline-offset-2 hover:underline"
+        >
+          &ldquo;{spot.reddit_citation_snippet}&rdquo; — r/{spot.reddit_citation_subreddit}
+        </a>
+      )}
+      <div className="space-y-2 border-t pt-3">
+        <p className="text-xs font-medium">Free things to do here</p>
+        {tips.length > 0 ? (
+          <ul className="space-y-2">
+            {tips.map((tip) => (
+              <li key={tip.id} className="flex gap-2 text-sm text-muted-foreground">
+                <TicketIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  {tip.tip}
+                  {tip.source_url && (
+                    <>
+                      {" "}
+                      <a
+                        href={tip.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        source
+                      </a>
+                    </>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Nobody&apos;s added one yet.
+          </p>
+        )}
+        <SuggestTipDialog spotId={spot.id} />
+      </div>
+    </div>
+  );
+}
+
+// Fixed height so the drag range is a known pixel constant — dvh-based sizing
+// would need to compute constraints off the rendered element instead.
+const SHEET_HEIGHT_PX = 420;
+const SHEET_PEEK_PX = 64;
+const SHEET_DRAG_THRESHOLD = 60;
+
+function MobileDetailSheet({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsedY = SHEET_HEIGHT_PX - SHEET_PEEK_PX;
+
+  useEffect(() => {
+    // Don't carry an expanded sheet over to the next card after a swipe.
+    setExpanded(false);
+  }, [spot.id]);
+
+  function handleDragEnd(_: unknown, info: PanInfo) {
+    if (info.offset.y < -SHEET_DRAG_THRESHOLD || info.velocity.y < -400) {
+      setExpanded(true);
+    } else if (info.offset.y > SHEET_DRAG_THRESHOLD || info.velocity.y > 400) {
+      setExpanded(false);
+    }
+  }
+
+  return (
+    <motion.div
+      className="fixed inset-x-0 bottom-0 z-[1100] flex flex-col rounded-t-2xl border-t bg-background shadow-lg md:hidden"
+      style={{ height: SHEET_HEIGHT_PX }}
+      drag="y"
+      dragConstraints={{ top: 0, bottom: collapsedY }}
+      dragElastic={0.1}
+      animate={{ y: expanded ? 0 : collapsedY }}
+      transition={{ type: "spring", stiffness: 320, damping: 32 }}
+      onDragEnd={handleDragEnd}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex shrink-0 flex-col items-center gap-1.5 py-2.5"
+        aria-expanded={expanded}
+      >
+        <span
+          aria-hidden="true"
+          className="h-1 w-10 rounded-full bg-muted-foreground/30"
+        />
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <ChevronUpIcon
+            aria-hidden="true"
+            className={cn("size-3.5 transition-transform", expanded && "rotate-180")}
+          />
+          More about this spot
+        </span>
+      </button>
+      <div className="flex-1 overflow-y-auto px-4 pb-6">
+        <SpotDetailPanel spot={spot} tips={tips} />
+      </div>
+    </motion.div>
+  );
 }
 
 type SwipeDirection = "left" | "right";
@@ -540,6 +702,11 @@ export function SpotSwipeDeck({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [deck]);
 
+  // Drives the desktop side panel + mobile bottom sheet. Declared above the
+  // early return below so hook order stays stable regardless of deck.length.
+  const topSpot = deck[0];
+  const topSpotTips = useSpotTips(topSpot?.id);
+
   if (deck.length === 0) {
     return (
       <div className="flex h-full flex-col">
@@ -579,87 +746,101 @@ export function SpotSwipeDeck({
     <div className="flex h-full flex-col">
       <SwipeNavBar savedCount={savedCount} onSavedCountChange={refreshSavedCount} />
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-4">
-      <div className="relative aspect-3/4 w-full max-w-sm">
-        <AnimatePresence>
-          {deck.slice(0, VISIBLE_STACK_DEPTH).map((spot, i) => (
-            <motion.div
-              key={spot.id}
-              className="absolute inset-0"
-              style={{ zIndex: VISIBLE_STACK_DEPTH - i }}
-              initial={false}
-              animate={{
-                scale: 1 - i * 0.04,
-                y: i * 10,
-                opacity: 1,
-              }}
-            >
-              <SwipeCard
-                spot={spot}
-                distanceMeters={
-                  userLocation
-                    ? haversineDistanceMeters(
-                        userLocation.lat,
-                        userLocation.lng,
-                        spot.lat,
-                        spot.lng,
-                      )
-                    : null
-                }
-                filters={filters}
-                onResolved={resolveTop}
-                isTop={i === 0}
+      {/* pb-16 leaves room for MobileDetailSheet's peeked handle below md. */}
+      <div className="flex flex-1 items-center justify-center gap-8 overflow-y-auto p-4 pb-16 md:pb-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative aspect-3/4 w-full max-w-sm">
+            <AnimatePresence>
+              {deck.slice(0, VISIBLE_STACK_DEPTH).map((spot, i) => (
+                <motion.div
+                  key={spot.id}
+                  className="absolute inset-0"
+                  style={{ zIndex: VISIBLE_STACK_DEPTH - i }}
+                  initial={false}
+                  animate={{
+                    scale: 1 - i * 0.04,
+                    y: i * 10,
+                    opacity: 1,
+                  }}
+                >
+                  <SwipeCard
+                    spot={spot}
+                    distanceMeters={
+                      userLocation
+                        ? haversineDistanceMeters(
+                            userLocation.lat,
+                            userLocation.lng,
+                            spot.lat,
+                            spot.lng,
+                          )
+                        : null
+                    }
+                    filters={filters}
+                    onResolved={resolveTop}
+                    isTop={i === 0}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          <div className="flex w-full max-w-[200px] flex-col items-center gap-1.5">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                style={{
+                  width: `${((totalCount - deck.length) / totalCount) * 100}%`,
+                }}
               />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalCount - deck.length + 1} of {totalCount}
+            </p>
+          </div>
 
-      <div className="flex w-full max-w-[200px] flex-col items-center gap-1.5">
-        <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-            style={{
-              width: `${((totalCount - deck.length) / totalCount) * 100}%`,
-            }}
-          />
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Undo last swipe"
+              disabled={history.length === 0}
+              onClick={undo}
+              className="size-11 rounded-full"
+            >
+              <Undo2Icon aria-hidden="true" className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-lg"
+              aria-label="Skip this spot"
+              onClick={() => resolveTop("left")}
+              className="size-16 rounded-full border-destructive/30 text-destructive hover:bg-destructive/10"
+            >
+              <XIcon aria-hidden="true" className="size-6" />
+            </Button>
+            <Button
+              size="icon-lg"
+              aria-label="Save this spot"
+              onClick={() => resolveTop("right")}
+              className="size-16 rounded-full"
+            >
+              <HeartIcon aria-hidden="true" className="size-6" />
+            </Button>
+            <div className="size-11" aria-hidden="true" />
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {totalCount - deck.length + 1} of {totalCount}
-        </p>
+
+        {/* Desktop only: mobile gets the same content via MobileDetailSheet
+            below, dragged/tapped open instead of always-visible — there's no
+            room for a permanent side panel at phone widths. */}
+        {topSpot && (
+          <div className="hidden max-h-[min(80vh,640px)] w-80 shrink-0 self-center overflow-y-auto rounded-2xl border bg-card p-5 md:block">
+            <SpotDetailPanel spot={topSpot} tips={topSpotTips} />
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-4">
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Undo last swipe"
-          disabled={history.length === 0}
-          onClick={undo}
-          className="size-11 rounded-full"
-        >
-          <Undo2Icon aria-hidden="true" className="size-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon-lg"
-          aria-label="Skip this spot"
-          onClick={() => resolveTop("left")}
-          className="size-16 rounded-full border-destructive/30 text-destructive hover:bg-destructive/10"
-        >
-          <XIcon aria-hidden="true" className="size-6" />
-        </Button>
-        <Button
-          size="icon-lg"
-          aria-label="Save this spot"
-          onClick={() => resolveTop("right")}
-          className="size-16 rounded-full"
-        >
-          <HeartIcon aria-hidden="true" className="size-6" />
-        </Button>
-        <div className="size-11" aria-hidden="true" />
-      </div>
-      </div>
+      {topSpot && <MobileDetailSheet spot={topSpot} tips={topSpotTips} />}
     </div>
   );
 }
