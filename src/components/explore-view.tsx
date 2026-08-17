@@ -369,7 +369,9 @@ export function ExploreView({
             </DialogContent>
           </Dialog>
           {isHeatmapMode && (
-            <p className="text-xs text-muted-foreground">Zoom in to filter</p>
+            <p className="text-xs text-muted-foreground">
+              Showing green space coverage — zoom in for spots and filters
+            </p>
           )}
           <Button
             variant="outline"
@@ -400,6 +402,38 @@ export function ExploreView({
             setMapMode(mode);
           }}
         />
+        {isHeatmapMode && (
+          <div className="pointer-events-none absolute top-3 left-1/2 z-[1000] w-[min(380px,calc(100%-1.5rem))] -translate-x-1/2">
+            <div className="pointer-events-auto motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out rounded-lg border bg-background/95 px-4 py-3 shadow-sm backdrop-blur-xs">
+              <p className="text-sm font-medium">Green space coverage</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Darker areas have more known parks and nature spots nearby.
+                Lighter areas may mean less green space — or just that we
+                haven&apos;t mapped that area yet.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  Fewer
+                </span>
+                <div
+                  className="h-2 flex-1 rounded-full"
+                  style={{
+                    background:
+                      "linear-gradient(to right, #bbf7d0, #4ade80, #16a34a, #14532d)",
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  More
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Full readings shown for the outlined regions (Portland, NYC)
+                — density elsewhere reflects unverified, uncleaned data.
+              </p>
+            </div>
+          </div>
+        )}
         {visibleCount === 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center">
             <div className="pointer-events-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:ease-out rounded-lg border bg-background/95 px-4 py-3 text-center shadow-sm backdrop-blur-xs">
