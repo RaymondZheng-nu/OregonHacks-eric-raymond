@@ -1,8 +1,10 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
+// Structural/animation styles only (spiderfy transitions) — no color. The
+// stock color scheme lived in this package's sibling MarkerCluster.Default.css,
+// deliberately not imported: clusterIcon() below replaces it entirely.
 import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
@@ -47,22 +49,6 @@ const MOVE_DEBOUNCE_MS = 300;
 
 export type MapMode = "markers" | "heatmap";
 type Viewport = { bounds: BoundingBox; zoom: number };
-
-// Matches markercluster's default icon but adds an accessible name: Leaflet
-// gives the cluster role="button" with no label, so a screen reader hears a
-// bare number. L.DivIcon has no `title` option, so set aria-label on the inner
-// element — the wrapper's accessible name resolves through its descendant.
-function clusterIcon(cluster: { getChildCount: () => number }) {
-  const childCount = cluster.getChildCount();
-  const sizeClass =
-    childCount < 10 ? "small" : childCount < 100 ? "medium" : "large";
-
-  return L.divIcon({
-    html: `<div aria-label="Cluster of ${childCount} spots — click to zoom in"><span aria-hidden="true">${childCount}</span></div>`,
-    className: `marker-cluster marker-cluster-${sizeClass}`,
-    iconSize: L.point(40, 40),
-  });
-}
 
 function boundsFromLeaflet(bounds: L.LatLngBounds): BoundingBox {
   return {
@@ -191,6 +177,43 @@ function HeatmapLayer({ points }: { points: L.HeatLatLngTuple[] }) {
   }, [map, points, pluginReady]);
 
   return null;
+}
+
+// Matches HEATMAP_GRADIENT's own stops, extended into marker mode — so
+// "darker green = more" stays the same rule whether you're looking at a
+// heat cluster or a pin cluster, instead of switching to leaflet.markercluster's
+// stock green/yellow/orange/red scheme (MarkerCluster.Default.css, not
+// imported above) right at the exact zoom level a user is most likely to
+// compare the two views back to back. Tiers calibrated against real cluster
+// counts seen live at typical viewport sizes (single digits up to a few
+// hundred). White count text on the two darker tiers — #14532d is too dark
+// for the default (implicitly black) text to stay legible.
+const CLUSTER_TIERS = [
+  { max: 10, size: 34, bg: "#bbf7d0", text: "#14532d" },
+  { max: 50, size: 40, bg: "#4ade80", text: "#14532d" },
+  { max: 150, size: 46, bg: "#16a34a", text: "#ffffff" },
+  { max: Infinity, size: 52, bg: "#14532d", text: "#ffffff" },
+];
+
+// react-leaflet-cluster's own .d.ts references L.MarkerClusterGroupOptions /
+// L.MarkerCluster, neither of which actually exists in @types/leaflet (no
+// @types/leaflet.markercluster package is installed) — only skipLibCheck
+// keeps that from erroring inside the library's own .d.ts. Typed narrowly
+// here (the one method this needs) instead of referencing that nonexistent
+// nominal type. aria-label on the wrapper (count itself is aria-hidden) gives
+// the cluster an accessible name — Leaflet marks it role="button" but leaves
+// it nameless otherwise, so a screen reader would hear a bare number.
+function clusterIcon(cluster: { getChildCount(): number }): L.DivIcon {
+  const count = cluster.getChildCount();
+  const tier =
+    CLUSTER_TIERS.find((t) => count < t.max) ??
+    CLUSTER_TIERS[CLUSTER_TIERS.length - 1];
+  return L.divIcon({
+    className: "",
+    html: `<div aria-label="Cluster of ${count} spots — click to zoom in" style="width:${tier.size}px;height:${tier.size}px;border-radius:9999px;background:${tier.bg};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;color:${tier.text};font:600 ${tier.size >= 46 ? 14 : 12}px system-ui,sans-serif;"><span aria-hidden="true">${count}</span></div>`,
+    iconSize: [tier.size, tier.size],
+    iconAnchor: [tier.size / 2, tier.size / 2],
+  });
 }
 
 // Tips are fetched lazily on popup open, not eagerly per marker — up to
@@ -328,6 +351,15 @@ export function SpotMap({
   // second "View on map" to a different spot on the same mounted instance
   // needs to open its popup too, which a one-shot flag would block.
   const openedFocusSpotIdRef = useRef<string | null>(null);
+  // Last count either mode-effect reported, read by the mode-change effect
+  // below so it never has to report a false "0" while a fresh fetch for the
+  // new mode is still in flight. Seeded from initialSpots.length, not 0 —
+  // explore-view.tsx's own visibleCount state starts there too, and the
+  // mode-change effect fires once immediately on mount (mode has to "change"
+  // from nothing to its first value); without this seed that first report
+  // would flash the header's spot count to 0 before the real fetch resolves,
+  // a regression from today's SSR-seeded first paint.
+  const lastCountRef = useRef(initialSpots.length);
 
   // initialSpots (SSR default viewport) only wins until the first client fetch;
   // after that, reapplying it would clobber wherever the user has panned to. A
@@ -384,6 +416,21 @@ export function SpotMap({
       ? "markers"
       : "heatmap";
 
+  // `mode` is a pure function of viewport.zoom, so it (and the Leaflet layer
+  // switch below that reads it directly) update the instant a zoom crosses
+  // the threshold — but the two data-fetch effects further down only call
+  // onViewChange once their own fetch resolves. Without this, the page
+  // chrome (title/legend, disabled filter dropdowns — anything the parent
+  // derives from onViewChange's `mode`) stays on the *previous* mode for a
+  // full network round-trip after the map has already switched, which reads
+  // as a stale/broken overlay sitting over the wrong layer. Reports the last
+  // known count rather than 0 so this doesn't also flash the visible spot
+  // count to zero on every crossing.
+  useEffect(() => {
+    onViewChange?.({ count: lastCountRef.current, mode });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only `mode` should retrigger this; onViewChange is a per-render parent prop, not a dependency to re-fire on.
+  }, [mode]);
+
   // No categories = show nothing. Derived at render, so no fetch needed for it.
   const noCategoriesSelected = categoryList.length === 0;
   const visibleSpots = noCategoriesSelected ? [] : spots;
@@ -411,6 +458,7 @@ export function SpotMap({
   useEffect(() => {
     if (!viewport || mode !== "markers" || !noCategoriesSelected) return;
     hasFetchedRef.current = true;
+    lastCountRef.current = 0;
     onViewChange?.({ count: 0, mode: "markers" });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange excluded, same as the fetch effect below.
   }, [viewport, mode, noCategoriesSelected]);
@@ -439,10 +487,18 @@ export function SpotMap({
         if (cancelled || filterRevision !== filterRevisionRef.current) return;
         hasFetchedRef.current = true;
         setSpots(result);
+        lastCountRef.current = result.length;
         onViewChange?.({ count: result.length, mode: "markers" });
       })
       .catch((error) => {
         console.error("Failed to fetch spots in bounds", error);
+        // Still report the mode on failure — see the heatmap effect's
+        // identical fix below for why (mismatch between what onViewChange
+        // last reported and what the map layer actually switched to).
+        if (!cancelled) {
+          lastCountRef.current = 0;
+          onViewChange?.({ count: 0, mode: "markers" });
+        }
       });
 
     return () => {
@@ -466,13 +522,20 @@ export function SpotMap({
         );
         setDensityPoints(points);
         const total = buckets.reduce((sum, b) => sum + b.count, 0);
+        lastCountRef.current = total;
         onViewChange?.({ count: total, mode: "heatmap" });
       })
       .catch((error) => {
         console.error("Failed to fetch spot density", error);
-        // Report the mode even on failure, or the parent's chrome stays stuck
-        // in marker-mode UI while the map has already switched to an empty heatmap.
-        if (!cancelled) onViewChange?.({ count: 0, mode: "heatmap" });
+        // Still report the mode even on failure — otherwise the page chrome
+        // (title/legend/hint, disabled filter dropdowns, all driven by the
+        // parent's own copy of `mode` from this callback) stays stuck
+        // showing stale marker-mode UI while the map underneath has already
+        // switched to a heatmap layer, just with no points in it.
+        if (!cancelled) {
+          lastCountRef.current = 0;
+          onViewChange?.({ count: 0, mode: "heatmap" });
+        }
       });
 
     return () => {

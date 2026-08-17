@@ -2,23 +2,34 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
-import { FeaturedSpotlight } from "@/components/featured-spotlight";
+import { LandingHighlights } from "@/components/landing-highlights";
 import { SavedButton } from "@/components/saved-button";
-import { SpotlightCarousel } from "@/components/spotlight-carousel";
-import { SessionQuestionnaire } from "@/components/session-questionnaire";
 import { StickyMobileCta } from "@/components/sticky-mobile-cta";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { boundingBox } from "@/lib/geo";
+import {
+  DEFAULT_CENTER,
+  DEFAULT_VIEWPORT_RADIUS_METERS,
+  PORTLAND_CENTER,
+} from "@/lib/search-params";
 import {
   getFeaturedSpots,
   getPendingCount,
   getVerifiedSpotCount,
+  getVerifiedSpotsInBounds,
 } from "@/lib/supabase/queries.server";
 
 // First CAROUSEL_COUNT feed the hero carousel, the rest fill the grid below.
 const CAROUSEL_COUNT = 5;
 const GRID_COUNT = 6;
 const FEATURED_COUNT = CAROUSEL_COUNT + GRID_COUNT;
+// City-scoped pool for the "more spots" grid once a city is picked in
+// CityPickerModal — same bounded-fetch pattern /explore's SSR view already
+// uses (search-params.ts), reused rather than a new query. photosFirst
+// keeps the grid photo-forward without requiring a hard photo_url filter;
+// FeaturedSpotlight already falls back to a map preview when one's missing.
+const CITY_FEATURED_COUNT = 8;
 
 export const metadata: Metadata = {
   title: "Find Real Parks & Nature Spots Near You",
@@ -27,11 +38,28 @@ export const metadata: Metadata = {
 };
 
 export default async function LandingPage() {
-  const [featured, pendingCount, spotCount] = await Promise.all([
-    getFeaturedSpots(FEATURED_COUNT),
-    getPendingCount(),
-    getVerifiedSpotCount(),
-  ]);
+  const [featured, pendingCount, spotCount, portlandFeatured, nycFeatured] =
+    await Promise.all([
+      getFeaturedSpots(FEATURED_COUNT),
+      getPendingCount(),
+      getVerifiedSpotCount(),
+      getVerifiedSpotsInBounds(
+        boundingBox(
+          PORTLAND_CENTER.lat,
+          PORTLAND_CENTER.lng,
+          DEFAULT_VIEWPORT_RADIUS_METERS,
+        ),
+        { limit: CITY_FEATURED_COUNT, photosFirst: true },
+      ),
+      getVerifiedSpotsInBounds(
+        boundingBox(
+          DEFAULT_CENTER.lat,
+          DEFAULT_CENTER.lng,
+          DEFAULT_VIEWPORT_RADIUS_METERS,
+        ),
+        { limit: CITY_FEATURED_COUNT, photosFirst: true },
+      ),
+    ]);
   const carouselSpots = featured.slice(0, CAROUSEL_COUNT);
   const restFeatured = featured.slice(CAROUSEL_COUNT);
 
@@ -79,46 +107,13 @@ export default async function LandingPage() {
           </div>
         </div>
       </header>
-      <section className="mx-auto grid max-w-[1400px] items-center gap-8 px-4 pt-8 pb-16 md:grid-cols-[1.1fr_1fr] md:gap-12 md:pt-12">
-        <div>
-          <h1 className="font-logo text-5xl tracking-tight text-green-700 md:text-7xl">
-            TOUCH GRASS
-          </h1>
-          <p className="mt-4 max-w-md text-xl text-muted-foreground text-pretty">
-            Yeah, you. Close the app, get off the couch, there&apos;s a whole
-            outside out there. Real parks and quiet spots near you, from people
-            who actually left the house to find them.
-          </p>
-          {spotCount > 0 && (
-            <p className="mt-3 text-sm font-medium text-green-700">
-              {spotCount.toLocaleString()}+ real spots mapped nationwide
-            </p>
-          )}
-          <div id="hero-cta" className="mt-8 flex flex-col items-start gap-4">
-            <p className="text-sm font-medium text-muted-foreground">
-              Feeling adventurous?
-            </p>
-            <SessionQuestionnaire large />
-            <Button
-              variant="outline"
-              size="lg"
-              nativeButton={false}
-              render={<Link href="/explore">Or browse the full map</Link>}
-            />
-          </div>
-        </div>
-
-        <SpotlightCarousel spots={carouselSpots} />
-      </section>
-
-      {restFeatured.length > 0 && (
-        <section className="mx-auto max-w-[1400px] px-4 pb-16">
-          <h2 className="mb-4 text-sm font-medium text-muted-foreground">
-            More spots worth checking out
-          </h2>
-          <FeaturedSpotlight spots={restFeatured} />
-        </section>
-      )}
+      <LandingHighlights
+        spotCount={spotCount}
+        carouselSpots={carouselSpots}
+        restFeatured={restFeatured}
+        portlandFeatured={portlandFeatured}
+        nycFeatured={nycFeatured}
+      />
       <StickyMobileCta heroCtaId="hero-cta" />
     </div>
   );

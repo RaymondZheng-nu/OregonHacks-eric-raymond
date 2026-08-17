@@ -12,18 +12,19 @@ import { getSpotVerdict } from "@/lib/spot-verdict";
 import { cn } from "@/lib/utils";
 import type { Spot } from "@/lib/types";
 
-// Own state per card so one failed photo doesn't blank the tile — photos
-// hotlink to their source with no fallback. Falls back to the location preview.
-function FeaturedSpotlightImage({ spot }: { spot: Spot }) {
-  const [imgFailed, setImgFailed] = useState(false);
+// Falls back to the map preview on a failed image load, not just a missing
+// photo_url — third-party photo hosts (e.g. Wikimedia Commons rate-limiting
+// next/image's proxy fetch under a burst of requests, observed live with a
+// city-scoped grid pulling several Commons-hosted photos at once) can fail
+// after the URL already looked valid. Needs its own component, not inline
+// state in the .map() below, since each card needs an independent failure
+// flag (hooks can't live inside a loop body).
+function FeaturedCardMedia({ spot }: { spot: Spot }) {
+  const [imageFailed, setImageFailed] = useState(false);
 
-  if (!spot.photo_url || imgFailed) {
+  if (!spot.photo_url || imageFailed) {
     return (
-      <SpotLocationPreview
-        lat={spot.lat}
-        lng={spot.lng}
-        category={spot.category}
-      />
+      <SpotLocationPreview lat={spot.lat} lng={spot.lng} category={spot.category} />
     );
   }
 
@@ -34,7 +35,7 @@ function FeaturedSpotlightImage({ spot }: { spot: Spot }) {
       fill
       sizes="(min-width: 640px) 33vw, 50vw"
       className="object-cover"
-      onError={() => setImgFailed(true)}
+      onError={() => setImageFailed(true)}
     />
   );
 }
@@ -71,10 +72,13 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
               className="gap-2 pt-0 transition-shadow duration-200 ease-out hover:shadow-md hover:ring-foreground/15"
             >
               <div className="relative aspect-4/3 w-full overflow-hidden rounded-t-xl">
-                <FeaturedSpotlightImage spot={spot} />
-                {/* Only positive/caution get a badge; neutral stays clean.
-                    Compact icon+count, not the full verdict sentence.
-                    z-[1001] keeps it above the location-preview map's panes. */}
+                <FeaturedCardMedia spot={spot} />
+                {/* Only the two signal-bearing tones get a badge — the common
+                    zero-votes case stays visually clean, no room here for the
+                    full verdict sentence used elsewhere (map popup, results,
+                    carousel), so this is a compact icon+count instead.
+                    z-[1001] keeps it above the location-preview map's own
+                    panes/controls when there's no photo. */}
                 {verdict.tone !== "neutral" && (
                   <div
                     className={cn(

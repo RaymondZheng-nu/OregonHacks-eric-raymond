@@ -46,7 +46,7 @@ export function ReviewSpotActions({ spotId }: { spotId: string }) {
     try {
       await confirmSpot(spotId);
     } catch {
-      toast.error("Couldn't confirm this spot — try again");
+      toast.error("Couldn't confirm this spot. Try again");
       return;
     } finally {
       setSubmitting(null);
@@ -63,7 +63,7 @@ export function ReviewSpotActions({ spotId }: { spotId: string }) {
     try {
       await flagSpot(spotId);
     } catch {
-      toast.error("Couldn't flag this spot — try again");
+      toast.error("Couldn't flag this spot. Try again");
       return;
     } finally {
       setSubmitting(null);
@@ -71,7 +71,7 @@ export function ReviewSpotActions({ spotId }: { spotId: string }) {
 
     addId(FLAGGED_KEY, spotId);
     setFlagged(true);
-    toast.success("Thanks — we'll take another look");
+    toast.success("Thanks, we'll take another look");
     router.refresh();
   }
 
@@ -93,7 +93,7 @@ export function ReviewSpotActions({ spotId }: { spotId: string }) {
           ? "Confirmed"
           : submitting === "confirm"
             ? "Confirming…"
-            : "Looks legit — confirm"}
+            : "Looks legit, confirm"}
       </Button>
       <Button
         size="sm"

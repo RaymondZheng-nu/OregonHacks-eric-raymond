@@ -377,7 +377,7 @@ export function SessionQuestionnaire({
                       </p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        Optional — skip this and we&apos;ll point you to
+                        Optional. Skip this and we&apos;ll point you to
                         spots around Portland.
                       </p>
                     )}

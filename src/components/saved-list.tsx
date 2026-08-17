@@ -29,7 +29,7 @@ export function SavedList() {
   if (saved.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Nothing saved yet — swipe right on a spot to add it here.
+        Nothing saved yet. Swipe right on a spot to add it here.
       </div>
     );
   }

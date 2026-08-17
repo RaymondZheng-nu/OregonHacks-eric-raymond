@@ -8,7 +8,7 @@ export default function SavedPage() {
         <div>
           <h1 className="font-logo text-2xl tracking-tight text-green-700">Saved Spots</h1>
           <p className="text-sm text-muted-foreground">
-            Spots you swiped right on — saved to this device only.
+            Spots you swiped right on, saved to this device only.
           </p>
         </div>
         <Link

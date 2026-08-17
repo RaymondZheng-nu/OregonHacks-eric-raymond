@@ -4,9 +4,13 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "upload.wikimedia.org" },
-      // Special:FilePath commons.wikimedia.org URLs (from OSM wikimedia_commons
-      // tags) 302-redirect to upload.wikimedia.org, but next/image validates the
-      // src hostname itself before following the redirect.
+      // backfill-photos.mjs resolves a spot's `File:` OSM tag to a Commons
+      // Special:FilePath URL (this hostname), which 302-redirects to
+      // upload.wikimedia.org — but next/image validates the src hostname
+      // itself before following the redirect, so both hosts are needed.
+      // Missing this crashed the whole homepage with a 500 the moment any
+      // featured spot (confirm_count-ranked, so this rotates) happened to
+      // have one of these as its photo_url.
       { protocol: "https", hostname: "commons.wikimedia.org" },
       { protocol: "https", hostname: "*.supabase.co" },
     ],

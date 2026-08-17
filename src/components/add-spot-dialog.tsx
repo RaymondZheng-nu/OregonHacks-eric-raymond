@@ -84,12 +84,12 @@ export function AddSpotDialog({
         setErrors((prev) => ({ ...prev, location: undefined }));
       } else {
         toast.error(
-          "Couldn't find that location — try a full address, or paste a Google Maps link"
+          "Couldn't find that location. Try a full address, or paste a Google Maps link"
         );
       }
     } catch {
       if (requestId === locationRequestIdRef.current) {
-        toast.error("Couldn't find that location — try again");
+        toast.error("Couldn't find that location. Try again");
       }
     } finally {
       if (requestId === locationRequestIdRef.current) setLocating(false);
@@ -110,7 +110,7 @@ export function AddSpotDialog({
       () => {
         if (requestId !== locationRequestIdRef.current) return;
         toast.error(
-          "Couldn't get your location — enter an address or paste a Google Maps link instead"
+          "Couldn't get your location. Enter an address or paste a Google Maps link instead"
         );
         setLocating(false);
       }
@@ -143,7 +143,7 @@ export function AddSpotDialog({
     }
     if (!location) {
       nextErrors.location =
-        "Add a location — paste a Google Maps link, an address, or use your location";
+        "Add a location: paste a Google Maps link, an address, or use your location";
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0 || !category || !location) return;
@@ -165,7 +165,7 @@ export function AddSpotDialog({
         photo_url: photoUrl,
       });
 
-      toast.success(`${name} submitted for review — check "Review submissions" to confirm it`);
+      toast.success(`${name} submitted for review. Check "Review submissions" to confirm it`);
       setOpen(false);
       setName("");
       setDescription("");
@@ -178,7 +178,7 @@ export function AddSpotDialog({
       onSubmitted?.();
       router.refresh();
     } catch {
-      toast.error("Couldn't save that spot — try again");
+      toast.error("Couldn't save that spot. Try again");
     } finally {
       setSubmitting(false);
     }
@@ -311,7 +311,7 @@ export function AddSpotDialog({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            New spots go to review first — once confirmed by others they show up on the map.
+            New spots go to review first. Once confirmed by others, they show up on the map.
           </p>
           <DialogFooter>
             <Button type="submit" disabled={submitting}>

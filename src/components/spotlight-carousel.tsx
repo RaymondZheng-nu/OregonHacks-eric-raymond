@@ -11,24 +11,22 @@ import type { Spot } from "@/lib/types";
 
 const AUTO_ADVANCE_MS = 5000;
 
-// Own state per slide so one failed photo doesn't blank the tile — photos
-// hotlink to their source with no fallback. Falls back to the location preview.
-function CarouselSlideImage({
+// Same failed-load fallback as featured-spotlight.tsx's FeaturedCardMedia —
+// see that component's comment for why (Wikimedia rate-limiting observed
+// live). Kept as its own component so each slide's failure flag is
+// independent, same reason as there.
+function CarouselSlideMedia({
   spot,
   priority,
 }: {
   spot: Spot;
   priority: boolean;
 }) {
-  const [imgFailed, setImgFailed] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
-  if (!spot.photo_url || imgFailed) {
+  if (!spot.photo_url || imageFailed) {
     return (
-      <SpotLocationPreview
-        lat={spot.lat}
-        lng={spot.lng}
-        category={spot.category}
-      />
+      <SpotLocationPreview lat={spot.lat} lng={spot.lng} category={spot.category} />
     );
   }
 
@@ -40,7 +38,7 @@ function CarouselSlideImage({
       priority={priority}
       sizes="(min-width: 768px) 50vw, 100vw"
       className="object-cover"
-      onError={() => setImgFailed(true)}
+      onError={() => setImageFailed(true)}
     />
   );
 }
@@ -116,10 +114,7 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
               key={spot.id}
               className="relative h-full w-full shrink-0 snap-center"
             >
-              <CarouselSlideImage
-                spot={spot}
-                priority={spot.id === spots[0].id}
-              />
+              <CarouselSlideMedia spot={spot} priority={spot.id === spots[0].id} />
               <div className="absolute inset-x-0 bottom-0 z-[1001] bg-gradient-to-t from-black/70 to-transparent p-4">
                 <p className="text-sm font-medium text-white">{spot.name}</p>
                 <p
