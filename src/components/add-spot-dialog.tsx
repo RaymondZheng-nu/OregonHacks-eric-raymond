@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PlusIcon, MapPinIcon } from "lucide-react";
@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitSpot } from "@/lib/supabase/queries.client";
+import { MAX_NAME_LENGTH, MAX_DESCRIPTION_LENGTH } from "@/lib/supabase/queries";
 import { uploadSpotPhoto } from "@/lib/supabase/storage";
 import { CATEGORY_OPTIONS } from "@/lib/categories";
 import { resolveLocationInput, type LatLng } from "@/lib/geocode";
@@ -43,14 +44,23 @@ export function AddSpotDialog({
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<SpotCategory>("other");
+  // No default: defaulting to "other" is how "other" became one of the most
+  // common categories live. Force an explicit pick.
+  const [category, setCategory] = useState<SpotCategory | null>(null);
   const [locationInput, setLocationInput] = useState("");
-  // Cleared whenever locationInput changes, so a stale resolution never gets
-  // silently submitted for text the user has since edited.
+  // Cleared when locationInput changes so a stale resolution isn't submitted.
   const [resolvedLocation, setResolvedLocation] = useState<LatLng | null>(null);
   const [locating, setLocating] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [errors, setErrors] = useState<{ name?: string; location?: string }>({});
+  // Remounts the file input on reset — its displayed filename is uncontrolled
+  // DOM state that setPhotoFile(null) doesn't clear.
+  const [photoInputKey, setPhotoInputKey] = useState(0);
+  const [errors, setErrors] = useState<{
+    name?: string;
+    category?: string;
+    location?: string;
+    description?: string;
+  }>({});
 
   function handleLocationInputChange(value: string) {
     setLocationInput(value);
@@ -58,11 +68,17 @@ export function AddSpotDialog({
     if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
   }
 
+  // Address lookup and "use my location" can race; tag each attempt and drop
+  // stale callbacks so the latest wins.
+  const locationRequestIdRef = useRef(0);
+
   async function locateFromInput() {
     if (!locationInput.trim() || locating) return;
+    const requestId = ++locationRequestIdRef.current;
     setLocating(true);
     try {
       const result = await resolveLocationInput(locationInput);
+      if (requestId !== locationRequestIdRef.current) return;
       if (result) {
         setResolvedLocation(result);
         setErrors((prev) => ({ ...prev, location: undefined }));
@@ -72,35 +88,52 @@ export function AddSpotDialog({
         );
       }
     } catch {
-      toast.error("Couldn't find that location. Try again");
+      if (requestId === locationRequestIdRef.current) {
+        toast.error("Couldn't find that location. Try again");
+      }
     } finally {
-      setLocating(false);
+      if (requestId === locationRequestIdRef.current) setLocating(false);
     }
   }
 
   function useMyLocation() {
+    const requestId = ++locationRequestIdRef.current;
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (requestId !== locationRequestIdRef.current) return;
         setResolvedLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocationInput(MY_LOCATION_LABEL);
+        setLocating(false);
         if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
       },
-      () =>
+      () => {
+        if (requestId !== locationRequestIdRef.current) return;
         toast.error(
           "Couldn't get your location. Enter an address or paste a Google Maps link instead"
-        )
+        );
+        setLocating(false);
+      }
     );
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const nextErrors: { name?: string; location?: string } = {};
-    if (!name.trim()) nextErrors.name = "Give this spot a name";
+    const nextErrors: { name?: string; category?: string; location?: string; description?: string } = {};
+    // Mirror insertSpot's server-side limits so an over-limit field gets a
+    // specific inline message, not just the generic save-failed toast.
+    if (!name.trim()) {
+      nextErrors.name = "Give this spot a name";
+    } else if (name.length > MAX_NAME_LENGTH) {
+      nextErrors.name = `Keep it under ${MAX_NAME_LENGTH} characters`;
+    }
+    if (!category) nextErrors.category = "Pick a category";
+    if (description.length > MAX_DESCRIPTION_LENGTH) {
+      nextErrors.description = `Keep it under ${MAX_DESCRIPTION_LENGTH} characters`;
+    }
 
-    // Submitting straight from a typed address (without clicking "Locate"
-    // first) is a real path, not just a fallback — resolve it here instead
-    // of forcing an extra click before every submission.
+    // Resolve a typed address on submit too, so "Locate" isn't a required click.
     let location = resolvedLocation;
     if (!location && locationInput.trim()) {
       setLocating(true);
@@ -113,7 +146,7 @@ export function AddSpotDialog({
         "Add a location: paste a Google Maps link, an address, or use your location";
     }
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0 || !location) return;
+    if (Object.keys(nextErrors).length > 0 || !category || !location) return;
 
     setSubmitting(true);
 
@@ -139,7 +172,8 @@ export function AddSpotDialog({
       setLocationInput("");
       setResolvedLocation(null);
       setPhotoFile(null);
-      setCategory("other");
+      setPhotoInputKey((k) => k + 1);
+      setCategory(null);
       setErrors({});
       onSubmitted?.();
       router.refresh();
@@ -185,11 +219,15 @@ export function AddSpotDialog({
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
             <Select
-              value={category}
-              onValueChange={(v) => setCategory(v as SpotCategory)}
+              value={category ?? ""}
+              onValueChange={(v) => {
+                setCategory(v as SpotCategory);
+                if (errors.category)
+                  setErrors((prev) => ({ ...prev, category: undefined }));
+              }}
             >
-              <SelectTrigger id="category">
-                <SelectValue />
+              <SelectTrigger id="category" aria-invalid={!!errors.category}>
+                <SelectValue placeholder="Pick a category" />
               </SelectTrigger>
               <SelectContent>
                 {CATEGORY_OPTIONS.map((opt) => (
@@ -204,15 +242,26 @@ export function AddSpotDialog({
                 ))}
               </SelectContent>
             </Select>
+            {errors.category && (
+              <p className="text-xs text-destructive">{errors.category}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                if (errors.description)
+                  setErrors((prev) => ({ ...prev, description: undefined }));
+              }}
               placeholder="What makes this spot worth visiting?"
+              aria-invalid={!!errors.description}
             />
+            {errors.description && (
+              <p className="text-xs text-destructive">{errors.description}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="location">Location</Label>
@@ -254,6 +303,7 @@ export function AddSpotDialog({
           <div className="space-y-2">
             <Label htmlFor="photo">Photo</Label>
             <Input
+              key={photoInputKey}
               id="photo"
               type="file"
               accept="image/*"

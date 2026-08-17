@@ -31,10 +31,8 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        // z-index above Leaflet's own .leaflet-top/.leaflet-bottom controls
-        // (z-index:1000, set by leaflet.css) — the map container doesn't
-        // establish its own stacking context, so anything less than that
-        // renders underneath the map instead of over it.
+        // Above Leaflet's controls (z-index:1000); the map sets no stacking
+        // context, so anything lower renders under it.
         "fixed inset-0 isolate z-[1100] bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}

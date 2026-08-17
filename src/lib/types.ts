@@ -31,5 +31,18 @@ export type Spot = {
   amenities: string[] | null;
   accessibility: string | null;
   climbing_grade: string | null;
+  reddit_citation_url: string | null;
+  reddit_citation_snippet: string | null;
+  reddit_citation_subreddit: string | null;
+  created_at: string;
+};
+
+export type FreeActivityTip = {
+  id: string;
+  spot_id: string | null;
+  tip: string;
+  source_url: string | null;
+  status: "pending" | "verified" | "rejected";
+  confirm_count: number;
   created_at: string;
 };

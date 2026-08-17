@@ -5,21 +5,10 @@ import {
   PORTLAND_CENTER,
 } from "@/lib/search-params";
 
-// The only two regions with cleaned, deduped spot data — everywhere else,
-// real spots may exist (scripts/ingest-osm-cities.mjs ingested ~30 more US
-// cities), but scripts/dedup-cleanup.mjs was run against a backup snapshot
-// taken before that batch existed, so nothing outside these two regions has
-// ever had its duplicates merged or its junk-sized ("park"/"other" polygons
-// under 150m²) rows filtered. There's no schema column marking which rows
-// were cleaned — dedup-cleanup.mjs isn't geography-scoped in code, it just
-// happened to run before the wider ingest — so geography is the only
-// available proxy for "trust this area's density reading."
-//
-// Reuses the same center points + radius the quiz's skip-address fallback
-// already treats as "Portland" / the app's other default search area
-// (src/lib/search-params.ts), rather than guessing a separate boundary —
-// this is genuinely the same area the rest of the app already calls
-// "Portland" or "the default region," not a boundary invented for this view.
+// The only two regions with cleaned, deduped data. dedup-cleanup.mjs ran on a
+// snapshot from before the wider ~30-city ingest, and no schema column marks
+// cleaned rows — so geography is the only proxy for "trust this density reading."
+// Reuses the app's existing center/radius constants, not a boundary invented here.
 export const COVERAGE_REGIONS: { name: string; bounds: BoundingBox }[] = [
   {
     name: "Portland",

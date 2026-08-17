@@ -1,7 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { CheckIcon, FlagIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,6 +61,12 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
               ease: [0.16, 1, 0.3, 1],
             }}
           >
+            {/* Links to /explore focused on this spot. `block` so the anchor
+                doesn't collapse to its inline size inside the motion.div. */}
+            <Link
+              href={`/explore?spot=${spot.id}&lat=${spot.lat}&lng=${spot.lng}`}
+              className="block"
+            >
             <Card
               size="sm"
               className="gap-2 pt-0 transition-shadow duration-200 ease-out hover:shadow-md hover:ring-foreground/15"
@@ -105,6 +112,7 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
                 </p>
               </CardContent>
             </Card>
+            </Link>
           </motion.div>
         );
       })}

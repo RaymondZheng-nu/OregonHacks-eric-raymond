@@ -22,11 +22,13 @@ const CITY_LABEL: Record<EventCity, string> = {
 // StickyMobileCta) has to stay put either way, so there's no clean seam to
 // split this at without duplicating state across two components.
 export function LandingHighlights({
+  spotCount,
   carouselSpots,
   restFeatured,
   portlandFeatured,
   nycFeatured,
 }: {
+  spotCount: number;
   carouselSpots: Spot[];
   restFeatured: Spot[];
   portlandFeatured: Spot[];
@@ -87,6 +89,11 @@ export function LandingHighlights({
             outside out there. Real parks and quiet spots near you, from people
             who actually left the house to find them.
           </p>
+          {spotCount > 0 && (
+            <p className="mt-3 text-sm font-medium text-green-700">
+              {spotCount.toLocaleString()}+ real spots mapped nationwide
+            </p>
+          )}
           <div id="hero-cta" className="mt-8 flex flex-col items-start gap-4">
             <p className="text-sm font-medium text-muted-foreground">
               Feeling adventurous?

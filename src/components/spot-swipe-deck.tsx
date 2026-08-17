@@ -19,6 +19,9 @@ import {
   AccessibilityIcon,
   RulerIcon,
   DumbbellIcon,
+  TicketIcon,
+  Share2Icon,
+  ChevronUpIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +33,8 @@ import {
 } from "@/components/ui/dialog";
 import { SavedModal } from "@/components/saved-modal";
 import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
+import { SuggestTipDialog } from "@/components/suggest-tip-dialog";
+import { getVerifiedTips } from "@/lib/supabase/queries.client";
 import { CATEGORY_META } from "@/lib/categories";
 import { directionsUrl, haversineDistanceMeters } from "@/lib/geo";
 import { getSpotVerdict } from "@/lib/spot-verdict";
@@ -47,18 +52,169 @@ import {
   getSkippedSpotIds,
   getSavedSpots,
 } from "@/lib/saved-spots";
-import type { Spot } from "@/lib/types";
+import type { FreeActivityTip, Spot } from "@/lib/types";
 
-// Past this offset (px) or this velocity (px/s), a drag release commits to
-// a swipe instead of snapping back — two independent triggers so a fast
-// flick past a lower distance still registers, same idea as native swipe
-// gesture thresholds.
+// A release past either the offset (px) or velocity (px/s) commits the swipe;
+// two triggers so a fast short flick still registers.
 const SWIPE_DISTANCE_THRESHOLD = 120;
 const SWIPE_VELOCITY_THRESHOLD = 500;
 
 function formatAmenity(amenity: string): string {
   if (amenity === "indoor_gym") return "Indoor gym";
   return amenity.replace(/_/g, " ");
+}
+
+function useSpotTips(spotId: string | undefined): FreeActivityTip[] {
+  const [tips, setTips] = useState<FreeActivityTip[]>([]);
+  useEffect(() => {
+    if (!spotId) return;
+    let cancelled = false;
+    getVerifiedTips(spotId).then((result) => {
+      if (!cancelled) setTips(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spotId]);
+  return tips;
+}
+
+// Extra detail that doesn't fit the compact swipe card — full description,
+// a small map, and the full tip list with source links (the card only shows
+// tip text as a badge). Desktop has the room to show this beside the card at
+// all times; mobile gets it as a drag-up sheet instead (see MobileDetailSheet).
+function SpotDetailPanel({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }) {
+  const verdict = getSpotVerdict(spot);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold leading-tight text-balance">
+          {spot.name}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {CATEGORY_META[spot.category].label}
+        </p>
+      </div>
+      <div className="h-36 w-full overflow-hidden rounded-lg">
+        <SpotLocationPreview
+          lat={spot.lat}
+          lng={spot.lng}
+          category={spot.category}
+        />
+      </div>
+      {spot.description && (
+        <p className="text-sm text-muted-foreground">{spot.description}</p>
+      )}
+      <p
+        className={cn(
+          "text-xs",
+          verdict.tone === "caution"
+            ? "text-destructive"
+            : "text-muted-foreground",
+        )}
+      >
+        {verdict.label}
+      </p>
+      {spot.reddit_citation_url && (
+        <a
+          href={spot.reddit_citation_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-xs text-muted-foreground underline-offset-2 hover:underline"
+        >
+          &ldquo;{spot.reddit_citation_snippet}&rdquo; — r/{spot.reddit_citation_subreddit}
+        </a>
+      )}
+      <div className="space-y-2 border-t pt-3">
+        <p className="text-xs font-medium">Free things to do here</p>
+        {tips.length > 0 ? (
+          <ul className="space-y-2">
+            {tips.map((tip) => (
+              <li key={tip.id} className="flex gap-2 text-sm text-muted-foreground">
+                <TicketIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  {tip.tip}
+                  {tip.source_url && (
+                    <>
+                      {" "}
+                      <a
+                        href={tip.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        source
+                      </a>
+                    </>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Nobody&apos;s added one yet.
+          </p>
+        )}
+        <SuggestTipDialog spotId={spot.id} />
+      </div>
+    </div>
+  );
+}
+
+// Fixed height so the drag range is a known pixel constant — dvh-based sizing
+// would need to compute constraints off the rendered element instead.
+const SHEET_HEIGHT_PX = 420;
+const SHEET_PEEK_PX = 64;
+const SHEET_DRAG_THRESHOLD = 60;
+
+function MobileDetailSheet({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsedY = SHEET_HEIGHT_PX - SHEET_PEEK_PX;
+
+  function handleDragEnd(_: unknown, info: PanInfo) {
+    if (info.offset.y < -SHEET_DRAG_THRESHOLD || info.velocity.y < -400) {
+      setExpanded(true);
+    } else if (info.offset.y > SHEET_DRAG_THRESHOLD || info.velocity.y > 400) {
+      setExpanded(false);
+    }
+  }
+
+  return (
+    <motion.div
+      className="fixed inset-x-0 bottom-0 z-[1100] flex flex-col rounded-t-2xl border-t bg-background shadow-lg md:hidden"
+      style={{ height: SHEET_HEIGHT_PX }}
+      drag="y"
+      dragConstraints={{ top: 0, bottom: collapsedY }}
+      dragElastic={0.1}
+      animate={{ y: expanded ? 0 : collapsedY }}
+      transition={{ type: "spring", stiffness: 320, damping: 32 }}
+      onDragEnd={handleDragEnd}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex shrink-0 flex-col items-center gap-1.5 py-2.5"
+        aria-expanded={expanded}
+      >
+        <span
+          aria-hidden="true"
+          className="h-1 w-10 rounded-full bg-muted-foreground/30"
+        />
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <ChevronUpIcon
+            aria-hidden="true"
+            className={cn("size-3.5 transition-transform", expanded && "rotate-180")}
+          />
+          More about this spot
+        </span>
+      </button>
+      <div className="flex-1 overflow-y-auto px-4 pb-6">
+        <SpotDetailPanel spot={spot} tips={tips} />
+      </div>
+    </motion.div>
+  );
 }
 
 type SwipeDirection = "left" | "right";
@@ -81,6 +237,21 @@ function SwipeCard({
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
   const skipOpacity = useTransform(x, [-120, -20], [1, 0]);
   const saveOpacity = useTransform(x, [20, 120], [0, 1]);
+  // Photos hotlink to their source (Wikimedia etc.) with no fallback; a dead
+  // link or rate-limit (seen with Wikimedia) rendered a blank box. Fall back to
+  // the same location-preview map used for photo-less spots.
+  const [imgFailed, setImgFailed] = useState(false);
+  const [tips, setTips] = useState<FreeActivityTip[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getVerifiedTips(spot.id).then((result) => {
+      if (!cancelled) setTips(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spot.id]);
 
   function handleDragEnd(_: unknown, info: PanInfo) {
     if (
@@ -108,10 +279,8 @@ function SwipeCard({
         drag={isTop ? "x" : false}
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.6}
-        // Spring, not a flat power curve, for the snap-back-to-center when a
-        // drag release doesn't cross the swipe threshold — matches the feel
-        // motion-primitives' carousel uses for its own drag release (damping/
-        // stiffness tuned for a quick settle without visible overshoot-bounce).
+        // Spring snap-back when a release doesn't cross the threshold; tuned for
+        // a quick settle without visible overshoot.
         dragTransition={{ bounceStiffness: 400, bounceDamping: 24 }}
         onDragEnd={isTop ? handleDragEnd : undefined}
         exit={{
@@ -120,15 +289,21 @@ function SwipeCard({
           transition: { type: "spring", stiffness: 200, damping: 24 },
         }}
       >
-        <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
+        <div
+          // Without inert, buried cards' "View on map" buttons stay in tab order,
+          // so keyboard users tab through obscured buttons before the real controls.
+          inert={!isTop}
+          className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10"
+        >
           <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden">
-            {spot.photo_url ? (
+            {spot.photo_url && !imgFailed ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={spot.photo_url}
                 alt={spot.name}
                 className="h-full w-full object-cover"
                 draggable={false}
+                onError={() => setImgFailed(true)}
               />
             ) : (
               <SpotLocationPreview
@@ -202,12 +377,29 @@ function SwipeCard({
                   {formatAmenity(amenity)}
                 </Badge>
               ))}
+              {tips.map((tip) => (
+                <Badge key={tip.id} variant="outline">
+                  <TicketIcon aria-hidden="true" />
+                  {tip.tip}
+                </Badge>
+              ))}
             </div>
 
             {spot.description && (
               <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
                 {spot.description}
               </p>
+            )}
+
+            {spot.reddit_citation_url && (
+              <a
+                href={spot.reddit_citation_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+              >
+                &ldquo;{spot.reddit_citation_snippet}&rdquo; — r/{spot.reddit_citation_subreddit}
+              </a>
             )}
 
             <p
@@ -221,21 +413,30 @@ function SwipeCard({
               {verdict.label}
             </p>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-1 self-start"
-              onClick={() => setShowLocation(true)}
-            >
-              View on map
-            </Button>
+            <div className="mt-1 flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLocation(true)}
+              >
+                View on map
+              </Button>
+              <Link
+                href={`/spot/${spot.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Share2Icon aria-hidden="true" className="size-3.5" />
+                Share
+              </Link>
+              <SuggestTipDialog spotId={spot.id} />
+            </div>
           </div>
         </div>
       </motion.div>
-      {/* Popup instead of a Link to /explore — navigating away unmounted the
-          quiz's swipeQuery state entirely, so a browser-back landed on a
-          fresh homepage with no way back into the same deck. Reuses the same
-          location preview a photo-less card already shows above. */}
+      {/* Popup, not a Link to /explore: navigating away unmounts the deck's
+          state, so browser-back lands on a fresh homepage instead of this deck. */}
       <Dialog open={showLocation} onOpenChange={setShowLocation}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -268,17 +469,24 @@ function SwipeCard({
   );
 }
 
-// Card count kept visible in the stack for the peek-behind effect — deeper
-// cards are inert (isTop=false disables drag) so only the front card ever
-// responds to a gesture.
+// How many cards render for the peek-behind stack; only the front one drags.
 const VISIBLE_STACK_DEPTH = 3;
 
-// Reveal in small batches instead of dropping the whole server-fetched pool
-// into the deck at once — matches /results' old cadence ("Generate more"
-// instead of "here are all 40 at once").
+// Reveal in small batches ("Generate more") instead of dumping the whole pool.
 const INITIAL_REVEAL = 5;
 const REVEAL_STEP = 5;
 
+function KeyHint({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
+      {children}
+    </kbd>
+  );
+}
+
+// Full-width header bar. On mobile this collapses to the same three links,
+// tightly packed; the keyboard hints and explicit "Exit" only make sense once
+// there's a keyboard and room to show them, so those are md+ only.
 function SwipeNavBar({
   savedCount,
   onSavedCountChange,
@@ -289,43 +497,57 @@ function SwipeNavBar({
   const [showSaved, setShowSaved] = useState(false);
 
   return (
-    <div className="flex w-full max-w-sm items-center justify-between px-1 pt-2">
+    <div className="flex w-full items-center justify-between border-b bg-background px-4 py-3 md:px-6">
+      <div className="flex items-center gap-4">
+        <Link
+          href="/explore"
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <MapIcon aria-hidden="true" className="size-4" />
+          Map view
+        </Link>
+        <span className="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
+          <KeyHint>←</KeyHint> skip
+          <KeyHint>→</KeyHint> save
+          <KeyHint>Backspace</KeyHint> undo
+        </span>
+      </div>
       <Link
-        href="/explore"
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        href="/"
+        className="font-logo text-sm tracking-tight text-green-700 hover:opacity-90"
       >
-        <MapIcon aria-hidden="true" className="size-4" />
-        Map view
-      </Link>
-      <span className="font-logo text-sm tracking-tight text-green-700">
         TOUCH GRASS
-      </span>
-      {/* Popup, not a Link to /saved — same reasoning as SwipeCard's "View
-          on map" fix: navigating away unmounted the deck entirely, so "back
-          to swiping" had nothing real to return to and fell back to a
-          generic, unscoped /swipe. */}
-      <button
-        type="button"
-        onClick={() => setShowSaved(true)}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <BookmarkIcon aria-hidden="true" className="size-4" />
-        Saved
-        {savedCount > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
-            {savedCount}
-          </span>
-        )}
-      </button>
+      </Link>
+      <div className="flex items-center gap-4">
+        {/* Popup, not a Link to /saved — same deck-unmount reasoning as above. */}
+        <button
+          type="button"
+          onClick={() => setShowSaved(true)}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <BookmarkIcon aria-hidden="true" className="size-4" />
+          Saved
+          {savedCount > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+              {savedCount}
+            </span>
+          )}
+        </button>
+        {/* Mobile keeps the fixed corner X in swipe/page.tsx instead. */}
+        <Link
+          href="/"
+          className="hidden items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground md:flex"
+        >
+          <XIcon aria-hidden="true" className="size-4" />
+          Exit
+        </Link>
+      </div>
       <SavedModal
         open={showSaved}
         onClose={() => {
           setShowSaved(false);
-          // The popup can remove saved spots itself (SavedList's trash
-          // button) — re-read from localStorage on close rather than
-          // threading a change callback through SavedModal/SavedList,
-          // since savedCount here is independent session state that only
-          // otherwise updates from this deck's own save/undo actions.
+          // The popup can delete saved spots itself, so re-read on close rather
+          // than threading a change callback through SavedModal/SavedList.
           onSavedCountChange();
         }}
       />
@@ -333,15 +555,10 @@ function SwipeNavBar({
   );
 }
 
-// One entry per resolved card, oldest first — powers the undo button by
-// reversing whichever of saveSpot/skipSpot was just called and restoring the
-// spot to the front of the deck. Session-scoped only, same as the deck
-// itself (a fresh page load starts clean). `savedNew` is only meaningful for
-// "right" entries — false means saveSpot was a no-op (already saved from
-// somewhere else), so undo must not call removeSavedSpot for it. In normal
-// operation this can't happen (already-saved spots never enter the deck —
-// see initialDeck below), kept as defense in depth against future code paths
-// that add cards to the deck some other way.
+// One entry per resolved card, powering undo. Session-scoped. savedNew only
+// matters for "right" entries: false means saveSpot was a no-op (already
+// saved), so undo must not removeSavedSpot. Can't happen today (already-saved
+// spots never enter the deck), kept as a guard for future deck-fill paths.
 type HistoryEntry = {
   spot: Spot;
   direction: SwipeDirection;
@@ -357,51 +574,32 @@ export function SpotSwipeDeck({
   userLocation?: { lat: number; lng: number };
   filters: MatchFilters;
 }) {
-  // Deck starts as the raw server-provided `spots` — matching the server
-  // render exactly (SSR has no localStorage/sessionStorage access, so it
-  // can't know what's already skipped/saved). Filtering by skipped/saved ids
-  // *and* slicing down to the first revealed batch happens in the mount
-  // effect below, client-only, after hydration — doing either via useMemo
-  // would run during the client's first render pass too, produce a shorter
-  // array than the server-rendered HTML, and trigger a React hydration
-  // mismatch the moment any prior-session skip/save history overlaps the
-  // new deck.
+  // Deck starts as the raw server `spots` to match SSR (no storage access
+  // server-side). Skipped/saved filtering and batch slicing happen in the mount
+  // effect, client-only — doing it in useMemo would shorten the first render
+  // and cause a hydration mismatch against the server HTML.
   const [deck, setDeck] = useState<Spot[]>(spots);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [savedCount, setSavedCount] = useState(0);
-  // Size of the *current* batch, not the full server pool — "Generate more"
-  // resets this to the fresh batch size rather than accumulating, so the
-  // progress bar always reads "1 of 5" for a new batch instead of "6 of 10"
-  // carrying the old batch's count forward.
+  // Current batch size, not the full pool — "Generate more" resets it so the
+  // progress bar reads "1 of 5" per batch, not "6 of 10".
   const [totalCount, setTotalCount] = useState(spots.length);
   const [hasMoreInPool, setHasMoreInPool] = useState(false);
 
-  // Mirrors of `deck`/`history` that are always synchronously current —
-  // unlike the state values, which only reflect the latest call once React
-  // commits a render. Two resolveTop/undo calls fired in the same tick (key
-  // repeat, a fast double-click before React re-renders) would otherwise
-  // both read the same stale `deck`/`history` closure and act on the same
-  // top card twice, corrupting history with duplicate entries that later
-  // duplicate a card back into the deck on undo. Reading/writing the ref
-  // synchronously inside each handler makes repeated same-tick calls each
-  // see the effect of the one before it.
+  // Synchronously-current mirrors of deck/history. Two resolveTop/undo calls in
+  // one tick (key repeat, fast double-click) would otherwise both read the same
+  // stale closure and act on the same card twice; the refs let each call see the
+  // previous one's effect.
   const deckRef = useRef(spots);
   const historyRef = useRef<HistoryEntry[]>([]);
-  // Filtered spots not yet revealed into the deck — populated once on
-  // mount, drained by generateMore(). Doesn't need to be state: it never
-  // renders directly, only gates the "Generate more" button via
-  // hasMoreInPool.
+  // Filtered spots not yet revealed; drained by generateMore(). Not state — it
+  // never renders, only gates the button via hasMoreInPool.
   const poolRef = useRef<Spot[]>([]);
 
   useEffect(() => {
-    // One-time hydration from localStorage/sessionStorage after mount — same
-    // convention as saved/page.tsx's read, not an ongoing subscription to
-    // set up. Excludes spots skipped earlier this session (sessionStorage)
-    // and spots already saved in a past session (localStorage): without
-    // this, a spot saved days ago can resurface in a fresh deck, a
-    // right-swipe on it is a silent no-op (saveSpot dedupes by id), and a
-    // later undo would still unconditionally remove it from the saved list
-    // — deleting a real, previously-saved spot the user never asked to remove.
+    // One-time hydration after mount. Excludes spots skipped this session and
+    // saved in a past one: otherwise an old saved spot resurfaces, a right-swipe
+    // is a silent no-op, and a later undo would delete it from the saved list.
     const skipped = getSkippedSpotIds();
     const saved = getSavedSpots();
     const savedIds = new Set(saved.map((s) => s.id));
@@ -418,7 +616,7 @@ export function SpotSwipeDeck({
     setTotalCount(revealed.length);
     setSavedCount(saved.length);
     setHasMoreInPool(poolRef.current.length > 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount to apply client-only storage filtering; re-running on `spots` identity would fight user-driven deck state after the first swipe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only; re-running on `spots` would fight user-driven deck state after the first swipe.
   }, []);
 
   function refreshSavedCount() {
@@ -466,25 +664,23 @@ export function SpotSwipeDeck({
     setHistory(historyRef.current);
   }
 
-  // Pulls the next REVEAL_STEP spots out of the not-yet-revealed pool and
-  // into the deck — only reachable from the empty-deck state, so deckRef is
-  // always [] here, but appending (not replacing) keeps this safe even if
-  // that ever changes.
+  // Reveals the next REVEAL_STEP spots. Only reachable from the empty-deck
+  // state, so this always starts a fresh batch.
   function generateMore() {
-    // Only reachable from the empty-deck state, so this always replaces an
-    // empty deck with a fresh batch — never appends leftover cards from the
-    // batch that was just fully swiped through.
     const next = poolRef.current.slice(0, REVEAL_STEP);
     poolRef.current = poolRef.current.slice(REVEAL_STEP);
     deckRef.current = next;
     setDeck(next);
     setTotalCount(next.length);
     setHasMoreInPool(poolRef.current.length > 0);
+    // Reset history per batch: an undo across the "Generate more" boundary would
+    // push an old card onto the new deck and let deck.length exceed totalCount.
+    historyRef.current = [];
+    setHistory([]);
   }
 
-  // Desktop/demo affordance — left/right arrows swipe, backspace undoes.
-  // Ignored while the deck is empty so an empty-state doesn't eat keystrokes
-  // headed for surrounding page chrome.
+  // Desktop: arrows swipe, backspace undoes. Off when the deck is empty so it
+  // doesn't eat keystrokes meant for surrounding chrome.
   useEffect(() => {
     if (deck.length === 0) return;
 
@@ -498,14 +694,17 @@ export function SpotSwipeDeck({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [deck]);
 
+  // Drives the desktop side panel + mobile bottom sheet. Declared above the
+  // early return below so hook order stays stable regardless of deck.length.
+  const topSpot = deck[0];
+  const topSpotTips = useSpotTips(topSpot?.id);
+
   if (deck.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="flex h-full flex-col">
         <SwipeNavBar savedCount={savedCount} onSavedCountChange={refreshSavedCount} />
-        <div className="flex flex-1 flex-col items-center justify-center gap-2">
-          {/* history.length === 0 here only ever means the initial pool was
-              already empty — reaching this render any other way requires a
-              swipe first, which always appends to history. */}
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+          {/* Empty history here means the pool started empty; any swipe appends. */}
           <p className="text-lg font-medium">
             {history.length === 0 ? "No spots match yet" : "That's every spot for now"}
           </p>
@@ -536,88 +735,106 @@ export function SpotSwipeDeck({
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-4">
+    <div className="flex h-full flex-col">
       <SwipeNavBar savedCount={savedCount} onSavedCountChange={refreshSavedCount} />
 
-      <div className="relative aspect-3/4 w-full max-w-sm">
-        <AnimatePresence>
-          {deck.slice(0, VISIBLE_STACK_DEPTH).map((spot, i) => (
-            <motion.div
-              key={spot.id}
-              className="absolute inset-0"
-              style={{ zIndex: VISIBLE_STACK_DEPTH - i }}
-              initial={false}
-              animate={{
-                scale: 1 - i * 0.04,
-                y: i * 10,
-                opacity: 1,
-              }}
-            >
-              <SwipeCard
-                spot={spot}
-                distanceMeters={
-                  userLocation
-                    ? haversineDistanceMeters(
-                        userLocation.lat,
-                        userLocation.lng,
-                        spot.lat,
-                        spot.lng,
-                      )
-                    : null
-                }
-                filters={filters}
-                onResolved={resolveTop}
-                isTop={i === 0}
+      {/* pb-16 leaves room for MobileDetailSheet's peeked handle below md. */}
+      <div className="flex flex-1 items-center justify-center gap-8 overflow-y-auto p-4 pb-16 md:pb-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative aspect-3/4 w-full max-w-sm">
+            <AnimatePresence>
+              {deck.slice(0, VISIBLE_STACK_DEPTH).map((spot, i) => (
+                <motion.div
+                  key={spot.id}
+                  className="absolute inset-0"
+                  style={{ zIndex: VISIBLE_STACK_DEPTH - i }}
+                  initial={false}
+                  animate={{
+                    scale: 1 - i * 0.04,
+                    y: i * 10,
+                    opacity: 1,
+                  }}
+                >
+                  <SwipeCard
+                    spot={spot}
+                    distanceMeters={
+                      userLocation
+                        ? haversineDistanceMeters(
+                            userLocation.lat,
+                            userLocation.lng,
+                            spot.lat,
+                            spot.lng,
+                          )
+                        : null
+                    }
+                    filters={filters}
+                    onResolved={resolveTop}
+                    isTop={i === 0}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          <div className="flex w-full max-w-[200px] flex-col items-center gap-1.5">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                style={{
+                  width: `${((totalCount - deck.length) / totalCount) * 100}%`,
+                }}
               />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalCount - deck.length + 1} of {totalCount}
+            </p>
+          </div>
 
-      <div className="flex w-full max-w-[200px] flex-col items-center gap-1.5">
-        <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-            style={{
-              width: `${((totalCount - deck.length) / totalCount) * 100}%`,
-            }}
-          />
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Undo last swipe"
+              disabled={history.length === 0}
+              onClick={undo}
+              className="size-11 rounded-full"
+            >
+              <Undo2Icon aria-hidden="true" className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-lg"
+              aria-label="Skip this spot"
+              onClick={() => resolveTop("left")}
+              className="size-16 rounded-full border-destructive/30 text-destructive hover:bg-destructive/10"
+            >
+              <XIcon aria-hidden="true" className="size-6" />
+            </Button>
+            <Button
+              size="icon-lg"
+              aria-label="Save this spot"
+              onClick={() => resolveTop("right")}
+              className="size-16 rounded-full"
+            >
+              <HeartIcon aria-hidden="true" className="size-6" />
+            </Button>
+            <div className="size-11" aria-hidden="true" />
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {totalCount - deck.length + 1} of {totalCount}
-        </p>
+
+        {/* Desktop only: mobile gets the same content via MobileDetailSheet
+            below, dragged/tapped open instead of always-visible — there's no
+            room for a permanent side panel at phone widths. */}
+        {topSpot && (
+          <div className="hidden max-h-[min(80vh,640px)] w-80 shrink-0 self-center overflow-y-auto rounded-2xl border bg-card p-5 md:block">
+            <SpotDetailPanel spot={topSpot} tips={topSpotTips} />
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-4">
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Undo last swipe"
-          disabled={history.length === 0}
-          onClick={undo}
-          className="size-11 rounded-full"
-        >
-          <Undo2Icon aria-hidden="true" className="size-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon-lg"
-          aria-label="Skip this spot"
-          onClick={() => resolveTop("left")}
-          className="size-16 rounded-full border-destructive/30 text-destructive hover:bg-destructive/10"
-        >
-          <XIcon aria-hidden="true" className="size-6" />
-        </Button>
-        <Button
-          size="icon-lg"
-          aria-label="Save this spot"
-          onClick={() => resolveTop("right")}
-          className="size-16 rounded-full"
-        >
-          <HeartIcon aria-hidden="true" className="size-6" />
-        </Button>
-        <div className="size-11" aria-hidden="true" />
-      </div>
+      {topSpot && (
+        <MobileDetailSheet key={topSpot.id} spot={topSpot} tips={topSpotTips} />
+      )}
     </div>
   );
 }

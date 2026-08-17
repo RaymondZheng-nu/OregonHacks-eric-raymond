@@ -1,9 +1,6 @@
-// Purely a refinement layer on top of category (see categories.ts) — never a
-// replacement for it. Category is the app's real taxonomy (park vs hidden
-// garden vs urbex spot); vibe just narrows within whatever categories were
-// picked. Zero vocabulary overlap with category on purpose: climbing and
-// birdwatching used to be listed both as a category *and* a vibe, which is
-// what made the quiz feel redundant. Now they're category-only.
+// A refinement on top of category, never a replacement — vibe narrows within
+// the picked categories. No overlap with category vocabulary on purpose:
+// climbing/birdwatching were both, which made the quiz feel redundant.
 export type VibeOption =
   | { value: string; label: string; kind: "activity"; activity: string }
   | { value: string; label: string; kind: "picnic" };

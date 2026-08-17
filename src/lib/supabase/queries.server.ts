@@ -7,8 +7,10 @@ import {
   fetchFeaturedSpots,
   fetchPendingSpots,
   fetchPendingCount,
+  fetchVerifiedSpotCount,
   fetchDistinctAmenities,
   fetchDistinctClimbingGrades,
+  fetchSpotById,
   type SpotsInBoundsOptions,
 } from "@/lib/supabase/queries";
 import type { BoundingBox } from "@/lib/geo";
@@ -42,6 +44,14 @@ export async function getPendingSpots() {
 
 export async function getPendingCount() {
   return fetchPendingCount(await createClient());
+}
+
+export async function getVerifiedSpotCount() {
+  return fetchVerifiedSpotCount(await createClient());
+}
+
+export async function getSpotById(id: string) {
+  return fetchSpotById(await createClient(), id);
 }
 
 export async function getDistinctAmenities() {

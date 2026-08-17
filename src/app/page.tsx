@@ -16,6 +16,7 @@ import {
 import {
   getFeaturedSpots,
   getPendingCount,
+  getVerifiedSpotCount,
   getVerifiedSpotsInBounds,
 } from "@/lib/supabase/queries.server";
 
@@ -37,10 +38,11 @@ export const metadata: Metadata = {
 };
 
 export default async function LandingPage() {
-  const [featured, pendingCount, portlandFeatured, nycFeatured] =
+  const [featured, pendingCount, spotCount, portlandFeatured, nycFeatured] =
     await Promise.all([
       getFeaturedSpots(FEATURED_COUNT),
       getPendingCount(),
+      getVerifiedSpotCount(),
       getVerifiedSpotsInBounds(
         boundingBox(
           PORTLAND_CENTER.lat,
@@ -68,7 +70,8 @@ export default async function LandingPage() {
           <span className="font-logo text-lg tracking-tight text-green-700">
             TOUCH GRASS
           </span>
-          <div className="flex items-center gap-4">
+          {/* gap-2 below sm: gap-4 overflows on a 320px phone. */}
+          <div className="flex items-center gap-2 sm:gap-4">
             <div className="hidden items-center gap-4 text-sm text-muted-foreground sm:flex">
               <Link href="/privacy" className="hover:text-foreground">
                 Privacy
@@ -82,10 +85,19 @@ export default async function LandingPage() {
               size="sm"
               nativeButton={false}
               render={
-                <Link href="/pending">
+                // aria-label carries the full name; below sm the visible text
+                // collapses to an icon, which would leave no accessible name.
+                <Link
+                  href="/pending"
+                  aria-label={`Review submissions${pendingCount > 0 ? ` (${pendingCount})` : ""}`}
+                >
                   <ClipboardListIcon aria-hidden="true" />
-                  Review submissions
-                  {pendingCount > 0 ? ` (${pendingCount})` : ""}
+                  <span className="hidden sm:inline" aria-hidden="true">
+                    Review submissions
+                  </span>
+                  <span aria-hidden="true">
+                    {pendingCount > 0 ? ` (${pendingCount})` : ""}
+                  </span>
                 </Link>
               }
             />
@@ -96,6 +108,7 @@ export default async function LandingPage() {
         </div>
       </header>
       <LandingHighlights
+        spotCount={spotCount}
         carouselSpots={carouselSpots}
         restFeatured={restFeatured}
         portlandFeatured={portlandFeatured}

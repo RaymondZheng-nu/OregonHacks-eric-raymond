@@ -6,6 +6,10 @@ import {
   fetchVerifiedSpotsInBounds,
   fetchVerifiedSpotsNationwide,
   fetchSpotDensity,
+  fetchVerifiedTips,
+  submitFreeActivityTip,
+  confirmTipRpc,
+  searchVerifiedSpots,
   type SubmitSpotInput,
   type SpotsInBoundsOptions,
 } from "@/lib/supabase/queries";
@@ -23,9 +27,7 @@ export async function getVerifiedSpotsInBounds(
   return fetchVerifiedSpotsInBounds(createClient(), bounds, options);
 }
 
-// Client-side counterpart to queries.server.ts's getVerifiedSpotsNationwide —
-// the swipe modal fetches in the browser (no page navigation), so it needs a
-// client-Supabase-client version of the same "no address given" fallback.
+// Client-side counterpart for the swipe modal's in-browser no-address fetch.
 export async function getVerifiedSpotsNationwide(
   options?: SpotsInBoundsOptions,
 ) {
@@ -42,4 +44,20 @@ export async function confirmSpot(spotId: string) {
 
 export async function flagSpot(spotId: string) {
   return flagSpotRpc(createClient(), spotId);
+}
+
+export async function getVerifiedTips(spotId: string) {
+  return fetchVerifiedTips(createClient(), spotId);
+}
+
+export async function submitTip(spotId: string, tip: string, sourceUrl: string | null) {
+  return submitFreeActivityTip(createClient(), spotId, tip, sourceUrl);
+}
+
+export async function confirmTip(tipId: string) {
+  return confirmTipRpc(createClient(), tipId);
+}
+
+export async function searchSpots(query: string) {
+  return searchVerifiedSpots(createClient(), query);
 }

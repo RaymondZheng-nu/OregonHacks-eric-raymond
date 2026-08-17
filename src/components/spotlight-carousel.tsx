@@ -48,17 +48,23 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  // Lets the interval callback read the current index without depending on it.
+  const indexRef = useRef(0);
+  useEffect(() => {
+    indexRef.current = index;
+  }, [index]);
 
-  // Auto-advance by scrolling the native snap container — this doubles as
-  // the touch/trackpad swipe implementation, so there's no separate gesture
-  // handler to keep in sync with the dots.
+  // Auto-advance by scrolling the native snap container (also the swipe impl).
+  // Not keyed on `index`: handleScroll fires setIndex during each smooth-scroll,
+  // and depending on it would rebuild the interval mid-transition and reset the
+  // countdown. Read indexRef.current instead.
   useEffect(() => {
     if (reduceMotion || paused || spots.length <= 1) return;
 
     const id = setInterval(() => {
       const scroller = scrollerRef.current;
       if (!scroller) return;
-      const next = (index + 1) % spots.length;
+      const next = (indexRef.current + 1) % spots.length;
       scroller.scrollTo({
         left: next * scroller.clientWidth,
         behavior: "smooth",
@@ -66,10 +72,9 @@ export function SpotlightCarousel({ spots }: { spots: Spot[] }) {
     }, AUTO_ADVANCE_MS);
 
     return () => clearInterval(id);
-  }, [index, paused, reduceMotion, spots.length]);
+  }, [paused, reduceMotion, spots.length]);
 
-  // Keeps the dots in sync when the user swipes/scrolls manually instead of
-  // going through goTo().
+  // Keeps the dots in sync on manual swipe/scroll (not via goTo).
   function handleScroll() {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.clientWidth === 0) return;
