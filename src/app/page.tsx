@@ -39,7 +39,10 @@ export default async function LandingPage() {
           <span className="font-logo text-lg tracking-tight text-green-700">
             TOUCH GRASS
           </span>
-          <div className="flex items-center gap-4">
+          {/* gap-2 below `sm`: at ~390px, logo + this button row + Add a
+              spot + theme toggle left zero breathing room at gap-4 — narrow
+              enough to actually overflow on a 320px phone (iPhone SE). */}
+          <div className="flex items-center gap-2 sm:gap-4">
             <div className="hidden items-center gap-4 text-sm text-muted-foreground sm:flex">
               <Link href="/privacy" className="hover:text-foreground">
                 Privacy
@@ -53,10 +56,21 @@ export default async function LandingPage() {
               size="sm"
               nativeButton={false}
               render={
-                <Link href="/pending">
+                // aria-label always carries the full name — below `sm` the
+                // visible text collapses to icon + count only (or just the
+                // icon when pendingCount is 0), which would otherwise leave
+                // the link with no accessible name at all at that width.
+                <Link
+                  href="/pending"
+                  aria-label={`Review submissions${pendingCount > 0 ? ` (${pendingCount})` : ""}`}
+                >
                   <ClipboardListIcon aria-hidden="true" />
-                  Review submissions
-                  {pendingCount > 0 ? ` (${pendingCount})` : ""}
+                  <span className="hidden sm:inline" aria-hidden="true">
+                    Review submissions
+                  </span>
+                  <span aria-hidden="true">
+                    {pendingCount > 0 ? ` (${pendingCount})` : ""}
+                  </span>
                 </Link>
               }
             />

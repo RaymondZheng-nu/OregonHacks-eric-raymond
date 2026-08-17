@@ -35,5 +35,6 @@ export function getSpotVerdict(spot: Spot): SpotVerdict {
 function fallbackReason(spot: Spot): string {
   if (spot.source === "official") return "From official city park data";
   if (spot.source === "osm") return "Mapped from OpenStreetMap";
-  return "A real spot worth checking out";
+  if (spot.source === "reddit") return "Spotted via a community mention";
+  return "Submitted by someone who's been there"; // source === "user"
 }

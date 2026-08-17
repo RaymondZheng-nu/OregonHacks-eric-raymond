@@ -75,6 +75,13 @@ function SwipeCard({
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
   const skipOpacity = useTransform(x, [-120, -20], [1, 0]);
   const saveOpacity = useTransform(x, [20, 120], [0, 1]);
+  // Photos are hotlinked straight to their source (Wikimedia, etc.) with no
+  // self-hosted fallback — a dead link or an origin rate-limiting the app
+  // (observed live against Wikimedia) previously rendered as a totally
+  // blank box with no visible alt text and no way to tell it had failed.
+  // Falls back to the same location-preview map used for spots with no
+  // photo at all, which is a real, working piece of UI rather than nothing.
+  const [imgFailed, setImgFailed] = useState(false);
 
   function handleDragEnd(_: unknown, info: PanInfo) {
     if (
@@ -118,15 +125,24 @@ function SwipeCard({
         transition: { type: "spring", stiffness: 200, damping: 24 },
       }}
     >
-      <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
+      <div
+        // Cards below the top of the stack are visually inert (drag/onDragEnd
+        // are both off), but without this, their "View on map" link is still a
+        // real focusable element in normal tab order — keyboard/screen-reader
+        // users would tab through 2 buried, mostly-obscured links before ever
+        // reaching the deck's actual skip/save/undo controls.
+        inert={!isTop}
+        className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10"
+      >
         <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden">
-          {spot.photo_url ? (
+          {spot.photo_url && !imgFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={spot.photo_url}
               alt={spot.name}
               className="h-full w-full object-cover"
               draggable={false}
+              onError={() => setImgFailed(true)}
             />
           ) : (
             <SpotLocationPreview
@@ -421,6 +437,12 @@ export function SpotSwipeDeck({
     setDeck(next);
     setTotalCount(next.length);
     setHasMoreInPool(poolRef.current.length > 0);
+    // History belongs to the batch it was recorded in — undo must not reach
+    // across a "Generate more" boundary and unshift a card from the old,
+    // already-finished batch onto the new (shorter) deck, which would let
+    // deck.length exceed totalCount and break the progress bar/label math.
+    historyRef.current = [];
+    setHistory([]);
   }
 
   // Desktop/demo affordance — left/right arrows swipe, backspace undoes.

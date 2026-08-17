@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { CheckIcon, FlagIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +11,36 @@ import { CATEGORY_META } from "@/lib/categories";
 import { getSpotVerdict } from "@/lib/spot-verdict";
 import { cn } from "@/lib/utils";
 import type { Spot } from "@/lib/types";
+
+// Extracted so each card's image-load failure gets its own state — photos
+// are hotlinked straight to their source (Wikimedia, etc.) with no
+// self-hosted fallback, and a dead link or a rate-limited origin previously
+// rendered as a totally blank tile with no visible alt text. Falls back to
+// the same location-preview map used for spots with no photo at all.
+function FeaturedSpotlightImage({ spot }: { spot: Spot }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (!spot.photo_url || imgFailed) {
+    return (
+      <SpotLocationPreview
+        lat={spot.lat}
+        lng={spot.lng}
+        category={spot.category}
+      />
+    );
+  }
+
+  return (
+    <Image
+      src={spot.photo_url}
+      alt={spot.name}
+      fill
+      sizes="(min-width: 640px) 33vw, 50vw"
+      className="object-cover"
+      onError={() => setImgFailed(true)}
+    />
+  );
+}
 
 export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
   const reduceMotion = useReducedMotion();
@@ -31,26 +63,22 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
               ease: [0.16, 1, 0.3, 1],
             }}
           >
+            {/* Was hover:shadow-md/hover:ring styling on the Card with no
+                href/onClick anywhere — implied clickability with no
+                affordance behind it. Links to /explore focused on this
+                spot, the same pattern spot-swipe-deck.tsx's "View on map"
+                already uses. `block` so the anchor doesn't collapse to its
+                inline content width/height inside the motion.div. */}
+            <Link
+              href={`/explore?spot=${spot.id}&lat=${spot.lat}&lng=${spot.lng}`}
+              className="block"
+            >
             <Card
               size="sm"
               className="gap-2 pt-0 transition-shadow duration-200 ease-out hover:shadow-md hover:ring-foreground/15"
             >
               <div className="relative aspect-4/3 w-full overflow-hidden rounded-t-xl">
-                {spot.photo_url ? (
-                  <Image
-                    src={spot.photo_url}
-                    alt={spot.name}
-                    fill
-                    sizes="(min-width: 640px) 33vw, 50vw"
-                    className="object-cover"
-                  />
-                ) : (
-                  <SpotLocationPreview
-                    lat={spot.lat}
-                    lng={spot.lng}
-                    category={spot.category}
-                  />
-                )}
+                <FeaturedSpotlightImage spot={spot} />
                 {/* Only the two signal-bearing tones get a badge — the common
                     zero-votes case stays visually clean, no room here for the
                     full verdict sentence used elsewhere (map popup, results,
@@ -90,6 +118,7 @@ export function FeaturedSpotlight({ spots }: { spots: Spot[] }) {
                 </p>
               </CardContent>
             </Card>
+            </Link>
           </motion.div>
         );
       })}

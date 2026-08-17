@@ -45,6 +45,31 @@ const MOVE_DEBOUNCE_MS = 300;
 export type MapMode = "markers" | "heatmap";
 type Viewport = { bounds: BoundingBox; zoom: number };
 
+// Same visual as leaflet.markercluster's own default icon (identical
+// size-tier className logic and DOM shape — see its
+// `_defaultIconCreateFunction`), but with an accessible name. Leaflet sets
+// role="button"/tabindex on the cluster's wrapper element whenever
+// `keyboard` is on (the default) but the library never gives it a name —
+// a screen reader hears a bare number with no indication it's a map
+// cluster. `L.DivIcon` has no `title` option (unlike `L.Marker`, which
+// applies its own `options.title` to the icon — not reachable here since
+// MarkerCluster doesn't forward iconCreateFunction's return value into its
+// own marker options), so this sets `aria-label` directly on the icon's
+// inner element instead: the accessible-name computation for the outer
+// role="button" wrapper falls back to "name from content," which resolves
+// through a descendant's own aria-label rather than just its raw text.
+function clusterIcon(cluster: { getChildCount: () => number }) {
+  const childCount = cluster.getChildCount();
+  const sizeClass =
+    childCount < 10 ? "small" : childCount < 100 ? "medium" : "large";
+
+  return L.divIcon({
+    html: `<div aria-label="Cluster of ${childCount} spots — click to zoom in"><span aria-hidden="true">${childCount}</span></div>`,
+    className: `marker-cluster marker-cluster-${sizeClass}`,
+    iconSize: L.point(40, 40),
+  });
+}
+
 function boundsFromLeaflet(bounds: L.LatLngBounds): BoundingBox {
   return {
     minLat: bounds.getSouth(),
@@ -190,7 +215,12 @@ export function SpotMap({
   // actually rendered, without react-leaflet exposing that as a declarative
   // prop on <Marker>.
   const markerRefs = useRef<Map<string, L.Marker>>(new Map());
-  const hasOpenedFocusPopupRef = useRef(false);
+  // Tracks which spot id's popup was last auto-opened, not just whether one
+  // ever was — a plain boolean flag never resets, so a second "View on map"
+  // navigation to a *different* spot (same SpotMap instance, still mounted
+  // across a client-side searchParams change) would silently never open its
+  // popup once the flag had already tripped once for an earlier spot.
+  const openedFocusSpotIdRef = useRef<string | null>(null);
 
   // `initialSpots` (the SSR-fetched default viewport) is only authoritative
   // until the client's first real viewport-driven fetch resolves — after
@@ -206,6 +236,43 @@ export function SpotMap({
     () => Array.from(categories).sort(),
     [categories],
   );
+
+  // Debounces category/filter-driven refetches independently from viewport-
+  // driven ones. `viewport` is already debounced upstream (ViewportWatcher's
+  // own MOVE_DEBOUNCE_MS timer below, before handleViewportChange ever
+  // fires) — without a *separate* debounce layer here, rapidly toggling
+  // category checkboxes or Advanced-filter chips fired one full network
+  // request per click (observed live: 7 requests for 7 rapid checkbox
+  // toggles), where sharing viewport's timer would instead double pan/zoom's
+  // perceived latency. filtersRef holds the latest values so the fetch
+  // effect always reads current filters, not whatever was current when the
+  // debounce timer was scheduled.
+  const filtersRef = useRef({
+    categoryList,
+    minParkAreaM2,
+    advancedFilters,
+    activity,
+    picnic,
+  });
+  const [debouncedFiltersTick, setDebouncedFiltersTick] = useState(0);
+  const isFirstFilterRenderRef = useRef(true);
+  useEffect(() => {
+    // Ref writes must happen in an effect, not during render (React forbids
+    // reading/writing ref.current in the render body) — safe here because
+    // this effect re-runs on every filter-value change, strictly before
+    // debouncedFiltersTick's own (delayed) update ever lets the fetch effect
+    // below re-read filtersRef.current.
+    filtersRef.current = { categoryList, minParkAreaM2, advancedFilters, activity, picnic };
+    if (isFirstFilterRenderRef.current) {
+      isFirstFilterRenderRef.current = false;
+      return;
+    }
+    const id = setTimeout(
+      () => setDebouncedFiltersTick((t) => t + 1),
+      MOVE_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(id);
+  }, [categoryList, minParkAreaM2, advancedFilters, activity, picnic]);
 
   const handleViewportChange = useCallback((next: Viewport) => {
     setViewport(next);
@@ -226,24 +293,48 @@ export function SpotMap({
   // exists in the currently-rendered set — the results list only passes the
   // spot's own coordinates, not a guarantee it's already in `spots`.
   useEffect(() => {
-    if (!focusSpotId || hasOpenedFocusPopupRef.current || noCategoriesSelected)
+    if (
+      !focusSpotId ||
+      openedFocusSpotIdRef.current === focusSpotId ||
+      noCategoriesSelected
+    )
       return;
     const marker = markerRefs.current.get(focusSpotId);
     if (marker) {
       marker.openPopup();
-      hasOpenedFocusPopupRef.current = true;
+      openedFocusSpotIdRef.current = focusSpotId;
     }
   }, [focusSpotId, spots, noCategoriesSelected]);
 
-  // Individual-marker mode: refetches on pan/zoom/category change.
+  // Instant "0 results" feedback for the zero-categories-selected state —
+  // deliberately its own effect, not folded into the debounced fetch effect
+  // below. noCategoriesSelected flips synchronously on every checkbox click
+  // (not debounced); if it were a dependency of the fetch effect, every
+  // transition across the zero boundary would re-run that whole effect
+  // immediately and fire its own fetch, defeating debouncedFiltersTick's
+  // coalescing for exactly the oscillating-through-zero case it exists to
+  // handle (confirmed live: 5 rapid toggles through zero fired 4 separate
+  // requests before this split, instead of the intended 1).
+  useEffect(() => {
+    if (!viewport || mode !== "markers" || !noCategoriesSelected) return;
+    hasFetchedRef.current = true;
+    onViewChange?.({ count: 0, mode: "markers" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded, same reasoning as the fetch effect below.
+  }, [viewport, mode, noCategoriesSelected]);
+
+  // Individual-marker mode: refetches on pan/zoom (instant, pre-debounced
+  // via ViewportWatcher) or category/filter change (debounced via
+  // debouncedFiltersTick above — see its comment for why these need
+  // separate debounce timers rather than sharing one). Does NOT depend on
+  // noCategoriesSelected (see the effect above) — whether to skip this fetch
+  // is instead decided from filtersRef.current.categoryList, the settled
+  // value as of the last debounce tick, not the live per-render one.
   useEffect(() => {
     if (!viewport || mode !== "markers") return;
 
-    if (noCategoriesSelected) {
-      hasFetchedRef.current = true;
-      onViewChange?.({ count: 0, mode: "markers" });
-      return;
-    }
+    const { categoryList, minParkAreaM2, advancedFilters, activity, picnic } =
+      filtersRef.current;
+    if (categoryList.length === 0) return;
 
     let cancelled = false;
     getVerifiedSpotsInBounds(viewport.bounds, {
@@ -267,16 +358,8 @@ export function SpotMap({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded: it's a per-render prop from the parent, not something a refetch should be keyed on.
-  }, [
-    viewport,
-    mode,
-    categoryList,
-    minParkAreaM2,
-    advancedFilters,
-    activity,
-    picnic,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onViewChange intentionally excluded: it's a per-render prop from the parent, not something a refetch should be keyed on. categoryList/minParkAreaM2/advancedFilters/activity/picnic intentionally excluded: read via filtersRef.current instead — debouncedFiltersTick is the deliberate proxy dependency for those.
+  }, [viewport, mode, debouncedFiltersTick]);
 
   // Heatmap mode: the density RPC has no category param (deliberately — see
   // schema.sql), so this only depends on viewport, not categoryList. Toggling
@@ -331,7 +414,7 @@ export function SpotMap({
         // Marker instance for the focusSpotId popup-opening effect above —
         // at focusSpotId's forced zoom (16), the pin it targets has already
         // separated out of any cluster.
-        <MarkerClusterGroup chunkedLoading>
+        <MarkerClusterGroup chunkedLoading iconCreateFunction={clusterIcon}>
           {visibleSpots.map((spot) => {
             const verdict = getSpotVerdict(spot);
             return (
@@ -339,6 +422,12 @@ export function SpotMap({
                 key={spot.id}
                 position={[spot.lat, spot.lng]}
                 icon={markerIcon(CATEGORY_META[spot.category].color)}
+                // Leaflet's Marker sets role="button"/tabindex on its icon
+                // element when `keyboard` is on (the default) but never an
+                // accessible name — without `title` (which Leaflet applies
+                // as the icon's `title` attribute), a screen reader announces
+                // a bare, unlabeled "button" for every pin on the map.
+                title={spot.name}
                 ref={(instance) => {
                   if (instance) markerRefs.current.set(spot.id, instance);
                   else markerRefs.current.delete(spot.id);

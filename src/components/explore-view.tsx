@@ -173,6 +173,40 @@ export function ExploreView({
           <p className="text-sm text-muted-foreground">
             {visibleCount} green spaces & nature spots in this view
           </p>
+          {/* Nothing anywhere previously explained what the marker colors/
+              counts mean — matches leaflet.markercluster's own default
+              size-tier colors (MarkerCluster.Default.css) exactly, so this
+              is accurate to what's actually on screen, not a guess.
+              Marker-mode only: in heatmap mode these colors mean something
+              else entirely (density gradient, not cluster size). */}
+          {!isHeatmapMode && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span
+                  aria-hidden="true"
+                  className="size-2.5 rounded-full"
+                  style={{ backgroundColor: "rgb(110, 204, 57)" }}
+                />
+                &lt;10 spots
+              </span>
+              <span className="flex items-center gap-1">
+                <span
+                  aria-hidden="true"
+                  className="size-2.5 rounded-full"
+                  style={{ backgroundColor: "rgb(240, 194, 12)" }}
+                />
+                10-99
+              </span>
+              <span className="flex items-center gap-1">
+                <span
+                  aria-hidden="true"
+                  className="size-2.5 rounded-full"
+                  style={{ backgroundColor: "rgb(241, 128, 23)" }}
+                />
+                100+
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-col gap-1">
@@ -314,17 +348,19 @@ export function ExploreView({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="wheelchair-only" className="cursor-pointer">
+                <div className="space-y-2">
+                  <Label>Accessibility</Label>
+                  {/* Was a bare native checkbox — the only control in this
+                      dialog not using the FilterChip pattern every sibling
+                      filter (size, amenities, climbing grade) does. */}
+                  <FilterChip
+                    active={wheelchairAccessibleOnly}
+                    onClick={() =>
+                      setWheelchairAccessibleOnly((prev) => !prev)
+                    }
+                  >
                     Wheelchair accessible only
-                  </Label>
-                  <input
-                    id="wheelchair-only"
-                    type="checkbox"
-                    checked={wheelchairAccessibleOnly}
-                    onChange={(e) => setWheelchairAccessibleOnly(e.target.checked)}
-                    className="size-4 accent-primary"
-                  />
+                  </FilterChip>
                 </div>
 
                 {isClimbingActive && availableClimbingGrades.length > 0 && (

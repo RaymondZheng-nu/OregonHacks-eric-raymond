@@ -150,7 +150,7 @@ function elementGeometry(element) {
 
 async function findNearbyVerifiedSpot(lat, lng, radiusMeters) {
   const box = boundingBox(lat, lng, radiusMeters);
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("spots")
     .select("id, lat, lng")
     .eq("status", "verified")
@@ -158,6 +158,14 @@ async function findNearbyVerifiedSpot(lat, lng, radiusMeters) {
     .lte("lat", box.maxLat)
     .gte("lng", box.minLng)
     .lte("lng", box.maxLng);
+
+  // A failed dedup lookup must never be read as "no duplicate" — that would
+  // insert a live duplicate into the shared table on a transient network
+  // blip. Throwing aborts this element's insert instead of silently
+  // corrupting the dataset.
+  if (error) {
+    throw new Error(`dedup lookup failed near ${lat},${lng}: ${error.message}`);
+  }
 
   return (data ?? []).some(
     (row) => haversineDistanceMeters(lat, lng, row.lat, row.lng) <= radiusMeters
@@ -249,6 +257,7 @@ async function main() {
   let skippedNoCoords = 0;
   let skippedTooSmall = 0;
   let skippedNearParent = 0;
+  let skippedDedupError = 0;
 
   for (const element of elements) {
     const name = element.tags?.name;
@@ -270,7 +279,17 @@ async function main() {
       continue;
     }
 
-    const nearby = await findNearbyVerifiedSpot(coords.lat, coords.lng, DEDUP_RADIUS_METERS);
+    // A failed dedup lookup must never fall through to the insert below —
+    // that would risk writing a live duplicate on a transient network blip.
+    // Skip just this element rather than aborting the whole run.
+    let nearby;
+    try {
+      nearby = await findNearbyVerifiedSpot(coords.lat, coords.lng, DEDUP_RADIUS_METERS);
+    } catch (err) {
+      console.error(`  skipping "${name}": ${err.message}`);
+      skippedDedupError++;
+      continue;
+    }
     if (nearby) {
       deduped++;
       continue;
@@ -334,7 +353,7 @@ async function main() {
   }
 
   console.log(
-    `Done. inserted=${inserted} deduped=${deduped} near_parent=${skippedNearParent} skipped(no name)=${skippedNoName} skipped(no coords)=${skippedNoCoords} skipped(too small)=${skippedTooSmall} total=${elements.length}`
+    `Done. inserted=${inserted} deduped=${deduped} near_parent=${skippedNearParent} skipped(no name)=${skippedNoName} skipped(no coords)=${skippedNoCoords} skipped(too small)=${skippedTooSmall} skipped(dedup error)=${skippedDedupError} total=${elements.length}`
   );
 }
 

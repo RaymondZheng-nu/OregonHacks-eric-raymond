@@ -83,7 +83,7 @@ async function fetchAllRecords() {
 
 async function findNearbyVerifiedSpot(lat, lng, radiusMeters) {
   const box = boundingBox(lat, lng, radiusMeters);
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("spots")
     .select("id, lat, lng")
     .eq("status", "verified")
@@ -91,6 +91,14 @@ async function findNearbyVerifiedSpot(lat, lng, radiusMeters) {
     .lte("lat", box.maxLat)
     .gte("lng", box.minLng)
     .lte("lng", box.maxLng);
+
+  // A failed dedup lookup must never be read as "no duplicate" — that would
+  // insert a live duplicate into the shared table on a transient network
+  // blip. Throwing lets the caller skip this record instead of silently
+  // corrupting the dataset.
+  if (error) {
+    throw new Error(`dedup lookup failed near ${lat},${lng}: ${error.message}`);
+  }
 
   return (data ?? []).some(
     (row) => haversineDistanceMeters(lat, lng, row.lat, row.lng) <= radiusMeters
@@ -108,6 +116,7 @@ async function main() {
   let skippedCategory = 0;
   let skippedNoName = 0;
   let skippedNoCoords = 0;
+  let skippedDedupError = 0;
 
   for (const record of records) {
     const category = resolveCategory(record);
@@ -128,7 +137,17 @@ async function main() {
       continue;
     }
 
-    const nearby = await findNearbyVerifiedSpot(coords.lat, coords.lng, DEDUP_RADIUS_METERS);
+    // A failed dedup lookup must never fall through to the insert below —
+    // that would risk writing a live duplicate on a transient network blip.
+    // Skip just this record rather than aborting the whole run.
+    let nearby;
+    try {
+      nearby = await findNearbyVerifiedSpot(coords.lat, coords.lng, DEDUP_RADIUS_METERS);
+    } catch (err) {
+      console.error(`  skipping "${name}": ${err.message}`);
+      skippedDedupError++;
+      continue;
+    }
     if (nearby) {
       deduped++;
       continue;
@@ -162,7 +181,7 @@ async function main() {
   }
 
   console.log(
-    `Done. inserted=${inserted} deduped=${deduped} skipped(category)=${skippedCategory} skipped(no name)=${skippedNoName} skipped(no coords)=${skippedNoCoords} total=${records.length}`
+    `Done. inserted=${inserted} deduped=${deduped} skipped(category)=${skippedCategory} skipped(no name)=${skippedNoName} skipped(no coords)=${skippedNoCoords} skipped(dedup error)=${skippedDedupError} total=${records.length}`
   );
 }
 

@@ -3,6 +3,7 @@ import type { Spot, SpotCategory } from "@/lib/types";
 import {
   boundingBox,
   haversineDistanceMeters,
+  isValidLatLng,
   type BoundingBox,
 } from "@/lib/geo";
 
@@ -33,12 +34,22 @@ export async function fetchVerifiedSpots(
   let from = 0;
 
   for (;;) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("spots")
       .select("*")
       .eq("status", "verified")
       .order("created_at", { ascending: false })
       .range(from, from + FETCH_PAGE_SIZE - 1);
+
+    // A mid-pagination error must not look identical to "reached the end" —
+    // without this, `data` is undefined, `page` becomes [], the loop's own
+    // length check reads that as the final (short) page, and this silently
+    // returns a truncated list as if it were the complete verified-spots
+    // set, with no signal to the caller that anything was cut short.
+    if (error) {
+      console.error("fetchVerifiedSpots: pagination failed, returning partial results", error);
+      break;
+    }
 
     const page = (data ?? []) as Spot[];
     allSpots.push(...page);
@@ -58,7 +69,7 @@ export async function fetchFeaturedSpots(
   supabase: SupabaseClient,
   limit: number,
 ): Promise<Spot[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("spots")
     .select("*")
     .eq("status", "verified")
@@ -67,6 +78,7 @@ export async function fetchFeaturedSpots(
     .order("confirm_count", { ascending: false })
     .limit(limit);
 
+  if (error) console.error("fetchFeaturedSpots failed", error);
   return (data ?? []) as Spot[];
 }
 
@@ -77,12 +89,19 @@ export async function fetchPendingSpots(
   let from = 0;
 
   for (;;) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("spots")
       .select("*")
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .range(from, from + FETCH_PAGE_SIZE - 1);
+
+    // Same reasoning as fetchVerifiedSpots above: a mid-pagination error must
+    // not be read as "no more pages" and silently truncate the pending list.
+    if (error) {
+      console.error("fetchPendingSpots: pagination failed, returning partial results", error);
+      break;
+    }
 
     const page = (data ?? []) as Spot[];
     allSpots.push(...page);
@@ -157,8 +176,19 @@ export async function fetchVerifiedSpotsInBounds(
     activity,
     picnic,
   } = options;
+  // Defense-in-depth on this function's own contract, not just its one
+  // real caller: `minParkAreaM2?: number` doesn't rule out NaN/Infinity,
+  // and Math.max(NaN, floor) is NaN — which would get string-interpolated
+  // straight into the .or() filter below as the literal text "NaN",
+  // producing a malformed PostgREST filter. The current UI path
+  // (search-params.ts's parseNumber) already filters non-finite values
+  // before they get here, but a future caller passing raw input wouldn't
+  // be protected by that.
+  const safeMinParkAreaM2 = Number.isFinite(minParkAreaM2)
+    ? minParkAreaM2
+    : undefined;
   const areaFloor = Math.max(
-    minParkAreaM2 ?? JUNK_AREA_FLOOR_M2,
+    safeMinParkAreaM2 ?? JUNK_AREA_FLOOR_M2,
     JUNK_AREA_FLOOR_M2,
   );
 
@@ -258,8 +288,19 @@ export async function fetchVerifiedSpotsNationwide(
     activity,
     picnic,
   } = options;
+  // Defense-in-depth on this function's own contract, not just its one
+  // real caller: `minParkAreaM2?: number` doesn't rule out NaN/Infinity,
+  // and Math.max(NaN, floor) is NaN — which would get string-interpolated
+  // straight into the .or() filter below as the literal text "NaN",
+  // producing a malformed PostgREST filter. The current UI path
+  // (search-params.ts's parseNumber) already filters non-finite values
+  // before they get here, but a future caller passing raw input wouldn't
+  // be protected by that.
+  const safeMinParkAreaM2 = Number.isFinite(minParkAreaM2)
+    ? minParkAreaM2
+    : undefined;
   const areaFloor = Math.max(
-    minParkAreaM2 ?? JUNK_AREA_FLOOR_M2,
+    safeMinParkAreaM2 ?? JUNK_AREA_FLOOR_M2,
     JUNK_AREA_FLOOR_M2,
   );
 
@@ -408,10 +449,32 @@ export async function fetchPendingCount(
   return count ?? 0;
 }
 
+// Named bounds, not magic numbers inline — generous enough to never bother a
+// real submission, just enough to stop a wildly malformed payload (e.g. a
+// pasted document) from being persisted as a spot name/description. Exported
+// so add-spot-dialog.tsx can validate against the exact same limit
+// client-side instead of only discovering it via a generic error toast when
+// this function's own check throws.
+export const MAX_NAME_LENGTH = 200;
+export const MAX_DESCRIPTION_LENGTH = 2000;
+
 export async function insertSpot(
   supabase: SupabaseClient,
   input: SubmitSpotInput,
 ): Promise<Spot> {
+  // add-spot-dialog.tsx already validates lat/lng client-side, but this is
+  // the actual system boundary — insertSpot is reachable by anything that
+  // imports it, present or future, not just that one dialog.
+  if (!isValidLatLng(input.lat, input.lng)) {
+    throw new Error("Invalid coordinates");
+  }
+  if (!input.name.trim() || input.name.length > MAX_NAME_LENGTH) {
+    throw new Error(`Name must be between 1 and ${MAX_NAME_LENGTH} characters`);
+  }
+  if (input.description && input.description.length > MAX_DESCRIPTION_LENGTH) {
+    throw new Error(`Description must be under ${MAX_DESCRIPTION_LENGTH} characters`);
+  }
+
   const { data, error } = await supabase
     .from("spots")
     .insert({ ...input, source: "user", status: "pending" })
@@ -451,7 +514,7 @@ export async function findNearbySpot(
   radiusMeters = 30,
 ): Promise<Spot | null> {
   const box = boundingBox(lat, lng, radiusMeters);
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("spots")
     .select("*")
     .eq("status", "verified")
@@ -460,6 +523,7 @@ export async function findNearbySpot(
     .gte("lng", box.minLng)
     .lte("lng", box.maxLng);
 
+  if (error) console.error("findNearbySpot failed", error);
   const candidates = (data ?? []) as Spot[];
   let closest: Spot | null = null;
   let closestDistance = Infinity;

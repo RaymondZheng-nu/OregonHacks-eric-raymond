@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SpotSwipeDeck } from "@/components/spot-swipe-deck";
 import {
   boundsFromSearch,
@@ -100,6 +100,10 @@ export function SwipeModal({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="h-[min(85dvh,700px)] gap-0 overflow-hidden p-0 sm:max-w-sm">
+        {/* SwipeNavBar's "TOUCH GRASS" wordmark is the visual header — this
+            gives the dialog an accessible name for screen readers, which
+            otherwise announce it as an unlabeled dialog on the app's main flow. */}
+        <DialogTitle className="sr-only">Swipe through nearby spots</DialogTitle>
         {data ? (
           <SpotSwipeDeck
             spots={data.spots}

@@ -94,7 +94,10 @@ export function buildExploreParams(parsed: ParsedSearch): URLSearchParams {
   if (parsed.lat !== null && parsed.lng !== null) {
     exploreParams.set("lat", String(parsed.lat));
     exploreParams.set("lng", String(parsed.lng));
-    if (parsed.radiusMeters)
+    // `!= null`, not truthiness — a plain `if (parsed.radiusMeters)` would
+    // silently drop an explicit radius of 0 (falsy in JS but a real value
+    // here, not "unset") from the round-tripped URL.
+    if (parsed.radiusMeters != null)
       exploreParams.set("radius", String(parsed.radiusMeters));
   }
   return exploreParams;

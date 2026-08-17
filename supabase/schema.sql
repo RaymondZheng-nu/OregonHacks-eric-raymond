@@ -88,13 +88,34 @@ drop index if exists spots_source_external_id_key;
 create unique index if not exists spots_source_external_id_key
   on spots (source, external_id);
 
+-- Status transition gated to `status = 'pending'`, mirroring flag_spot below:
+-- without this, confirm_spot had no status check at all, so anon-key spam
+-- could flip an already-`rejected` spot back to `verified`, or a `merged`
+-- child (whose merged_into still points at its parent) back to `verified`
+-- too — producing a duplicate visible pin in a state the app never
+-- otherwise creates. confirm_count still increments unconditionally,
+-- matching flag_count's own design (both stay meaningful as display counts
+-- past the status-deciding threshold).
+-- security definer + fixed search_path: this function now needs to UPDATE
+-- `spots` even after anon's own direct UPDATE grant is revoked below (see
+-- the revoke statement near the end of this file) — invoker-security (the
+-- implicit default) would otherwise start failing for anon callers the
+-- moment that revoke takes effect, since it runs with the *caller's*
+-- privileges. Definer-security runs as this function's owner instead,
+-- letting anon mutate `spots` only through this narrow, status-gated
+-- interface rather than via an open table grant. `set search_path = public`
+-- pins name resolution so a caller can't hijack it by defining an
+-- identically-named object earlier in their own search_path.
 create or replace function confirm_spot(spot_id uuid, threshold integer default 2)
 returns void as $$
   update spots
   set confirm_count = confirm_count + 1,
-      status = case when confirm_count + 1 >= threshold then 'verified' else status end
+      status = case
+        when status = 'pending' and confirm_count + 1 >= threshold then 'verified'
+        else status
+      end
   where id = spot_id;
-$$ language sql;
+$$ language sql security definer set search_path = public;
 
 -- Added so /pending has a way to say a submission looks fake/junk, not just
 -- confirm. Every spot's own flag report count, surfaced in the crowd verdict
@@ -106,19 +127,31 @@ alter table spots add column if not exists flag_count integer not null default 0
 -- accumulates flag_count for display (see spot-verdict.ts) but is never
 -- auto-hidden by it, since anon flags on an already-live spot are a
 -- griefing vector with no auth to stop them.
+-- security definer + fixed search_path: same reasoning as confirm_spot
+-- above — needs to keep UPDATE-ing `spots` under its own privileges once
+-- anon's direct UPDATE grant is revoked below.
 create or replace function flag_spot(spot_id uuid, threshold integer default 2)
 returns void as $$
   update spots
   set flag_count = flag_count + 1,
       status = case when status = 'pending' and flag_count + 1 >= threshold then 'rejected' else status end
   where id = spot_id;
-$$ language sql;
+$$ language sql security definer set search_path = public;
 
 -- Speeds up the viewport bounding-box filter (status + lat/lng range) used by
 -- both the map's in-bounds query and the ingestion scripts' proximity dedup
 -- check. Without this, those queries fall back to a full scan of every
 -- verified row on every request as the table keeps growing.
 create index if not exists spots_status_lat_lng_idx on spots (status, lat, lng);
+
+-- amenities/activity_fit are filtered via .overlaps() in queries.ts (the
+-- Postgres `&&` array-overlap operator), which a plain btree can't support
+-- at all — without a GIN index, every Advanced Filter combo that touches
+-- either column falls back to a full sequential scan of the matching-status
+-- rows. Cheap to add now, before ingestion grows the table further; harmless
+-- if these filters end up lightly used.
+create index if not exists spots_amenities_gin_idx on spots using gin (amenities);
+create index if not exists spots_activity_fit_gin_idx on spots using gin (activity_fit);
 
 -- Zoomed-out map views: instead of shipping every spot's full row (or even
 -- just lat/lng) to the client, bucket verified spots into a coarse lat/lng
@@ -140,11 +173,19 @@ begin
   -- Same anon-reachability concern as the grid_size floor below: `limit`
   -- only caps the aggregated *output*, not the scan+group-by cost that
   -- happens before it. A world-sized bounds request would still force a
-  -- full scan of every verified row on each call. 20 degrees comfortably
-  -- covers a multi-state viewport (the widest legitimate use here) while
-  -- rejecting anything approaching global scale.
-  if (max_lat - min_lat) > 20 or (max_lng - min_lng) > 20 then
-    raise exception 'bounds span too large: max 20 degrees per axis';
+  -- full scan of every verified row on each call. The previous 20-degree
+  -- cap was wrong for this app specifically: this is a USA-wide product
+  -- (see README), and CONUS alone spans ~58 degrees of longitude (Pacific
+  -- coast to Maine) — so zooming out to see the whole country (a real,
+  -- intended use, not abuse) always exceeded 20 and silently broke the
+  -- heatmap with a 400 the UI only logged to the console. 70 degrees
+  -- comfortably covers a full CONUS-width viewport with margin while still
+  -- rejecting anything approaching true global scale (180+ degrees) — the
+  -- cost profile barely changes versus 20 in practice, since a CONUS-wide
+  -- query already scans essentially the same `verified` rows a 20-degree
+  -- regional query over the densest part of the country would.
+  if (max_lat - min_lat) > 70 or (max_lng - min_lng) > 70 then
+    raise exception 'bounds span too large: max 70 degrees per axis';
   end if;
 
   return query
@@ -208,3 +249,12 @@ end $$;
 -- Enabling RLS here without matching policies would silently break anonymous submission
 -- and confirmation. If auth is added post-hackathon, replace this line with real policies.
 alter table spots disable row level security;
+
+-- Every legitimate anon write goes through insertSpot (INSERT) or the
+-- confirm_spot/flag_spot RPCs above — nothing in the app ever needs anon to
+-- UPDATE or DELETE `spots` rows directly via PostgREST. Supabase's default
+-- anon grants are broad enough to allow exactly that (e.g. an arbitrary
+-- `.update({status:'rejected'}).eq('id', anyId)` from the browser), so this
+-- explicitly closes off unused attack surface with zero behavior change to
+-- any real code path. SELECT/INSERT stay open — both are load-bearing.
+revoke update, delete on spots from anon;

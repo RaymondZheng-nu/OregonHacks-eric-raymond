@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CompassIcon, Footprints, Bike, Car, TrainFront } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -116,6 +116,21 @@ export function SessionQuestionnaire({
     categories?: string;
     address?: string;
   }>({});
+  // `key={step}` below remounts the step's content div on every Next/Back,
+  // which silently drops focus to <body> with no cue to a screen reader
+  // that the question changed. Moves focus onto the new step's container
+  // instead — skipped on the very first render (isFirstStepRenderRef) so it
+  // doesn't fight Base UI's own initial-focus behavior when the dialog first
+  // opens (which focuses the first interactive element on step 0).
+  const stepContentRef = useRef<HTMLDivElement>(null);
+  const isFirstStepRenderRef = useRef(true);
+  useEffect(() => {
+    if (isFirstStepRenderRef.current) {
+      isFirstStepRenderRef.current = false;
+      return;
+    }
+    stepContentRef.current?.focus();
+  }, [step]);
 
   function toggleCategory(category: SpotCategory) {
     setCategories((prev) => {
@@ -248,24 +263,35 @@ export function SessionQuestionnaire({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex justify-center gap-1.5" aria-hidden="true">
-            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-200 ease-out",
-                  i === step
-                    ? "w-5 bg-primary"
-                    : "w-1.5 bg-muted-foreground/30",
-                )}
-              />
-            ))}
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex justify-center gap-1.5" aria-hidden="true">
+              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-200 ease-out",
+                    i === step
+                      ? "w-5 bg-primary"
+                      : "w-1.5 bg-muted-foreground/30",
+                  )}
+                />
+              ))}
+            </div>
+            {/* The dots above are decoration-only (aria-hidden) — this is the
+              actual step-progress content for screen readers, since nothing
+              else in the form communicates that it's a multi-step wizard or
+              which step is current. aria-live so it's announced on change. */}
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              Step {step + 1} of {TOTAL_STEPS}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div
               key={step}
-              className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
+              ref={stepContentRef}
+              tabIndex={-1}
+              className="outline-none motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
             >
               {step === 0 && (
                 <div className="space-y-2">
