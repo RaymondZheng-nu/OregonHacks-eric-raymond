@@ -444,7 +444,12 @@ export function SpotSwipeDeck({
       <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
         <SwipeNavBar savedCount={savedCount} />
         <div className="flex flex-1 flex-col items-center justify-center gap-2">
-          <p className="text-lg font-medium">That&apos;s every spot for now</p>
+          {/* history.length === 0 here only ever means the initial pool was
+              already empty — reaching this render any other way requires a
+              swipe first, which always appends to history. */}
+          <p className="text-lg font-medium">
+            {history.length === 0 ? "No spots match yet" : "That's every spot for now"}
+          </p>
           <p className="text-sm text-muted-foreground">
             Check your saved spots, or browse the full map instead.
           </p>

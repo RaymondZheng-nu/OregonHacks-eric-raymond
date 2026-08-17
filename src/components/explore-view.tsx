@@ -39,6 +39,13 @@ const MIN_PARK_AREA_FLOOR_M2 = 150;
 // tag data, so there's nothing to discover dynamically here.
 const SIZE_CLASSES = ["small", "medium", "large"] as const;
 
+// Selectable on /explore's category picker (core to the product vision) but
+// with zero live spots today — confirmed via live count, not a guess. Picking
+// only these gives a genuinely empty map, so that state gets a designed
+// "add the first one" invite instead of the generic no-matches message.
+// Update or remove this once either category has real data.
+const ZERO_SPOT_CATEGORIES: SpotCategory[] = ["abandoned", "hangout"];
+
 function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
   const next = new Set(set);
   if (next.has(value)) next.delete(value);
@@ -122,6 +129,17 @@ export function ExploreView({
   const [climbingGrades, setClimbingGrades] = useState<Set<string>>(new Set());
   const isHeatmapMode = mapMode === "heatmap";
   const isClimbingActive = activeCategories.has("climbing");
+  // True only when every active category is a known-empty one — a mixed
+  // selection (e.g. abandoned + park) still shows real park spots, so the
+  // generic no-matches state stays correct for that case.
+  const isOnlyZeroSpotCategories =
+    activeCategories.size > 0 &&
+    Array.from(activeCategories).every((category) =>
+      ZERO_SPOT_CATEGORIES.includes(category),
+    );
+  const zeroSpotCategoryLabel = Array.from(activeCategories)
+    .map((category) => CATEGORY_META[category].label)
+    .join(" or ");
 
   const advancedFilters: AdvancedFilters = useMemo(
     () => ({
@@ -385,7 +403,19 @@ export function ExploreView({
         {visibleCount === 0 && (
           <div className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center">
             <div className="pointer-events-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:ease-out rounded-lg border bg-background/95 px-4 py-3 text-center shadow-sm backdrop-blur-xs">
-              {isHeatmapMode ? (
+              {isOnlyZeroSpotCategories ? (
+                <>
+                  <p className="text-sm font-medium">
+                    No {zeroSpotCategoryLabel} spots yet
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Nobody&apos;s added one here yet — know a spot like this?
+                  </p>
+                  <div className="mt-3 flex justify-center">
+                    <AddSpotDialog triggerSize="sm" />
+                  </div>
+                </>
+              ) : isHeatmapMode ? (
                 <>
                   <p className="text-sm font-medium">No spots in this area yet</p>
                   <p className="text-xs text-muted-foreground">
