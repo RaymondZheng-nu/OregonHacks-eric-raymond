@@ -64,10 +64,10 @@ enabled = true
 schema_paths = []
 
 [db.seed]
-# If enabled, seeds the database after migrations during a db reset.
-enabled = true
-# Specifies an ordered list of seed files to load during db reset.
-# Supports glob patterns relative to supabase directory: "./seeds/*.sql"
+# actual seeding is `npm run seed` (scripts/seed.mjs) against seed-data.json,
+# not a SQL file — leave this off so db reset doesn't silently skip a
+# seed.sql that was never tracked
+enabled = false
 sql_paths = ["./seed.sql"]
 
 [db.network_restrictions]

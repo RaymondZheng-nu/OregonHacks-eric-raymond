@@ -106,12 +106,15 @@ create unique index if not exists spots_source_external_id_key
 -- interface rather than via an open table grant. `set search_path = public`
 -- pins name resolution so a caller can't hijack it by defining an
 -- identically-named object earlier in their own search_path.
-create or replace function confirm_spot(spot_id uuid, threshold integer default 2)
+-- threshold is NOT a parameter — it used to be, but that let any anon caller
+-- hit the RPC directly with threshold=0 and instantly verify (or, on
+-- flag_spot, reject) any pending spot in one call. Fixed at 2 inline instead.
+create or replace function confirm_spot(spot_id uuid)
 returns void as $$
   update spots
   set confirm_count = confirm_count + 1,
       status = case
-        when status = 'pending' and confirm_count + 1 >= threshold then 'verified'
+        when status = 'pending' and confirm_count + 1 >= 2 then 'verified'
         else status
       end
   where id = spot_id;
@@ -130,11 +133,11 @@ alter table spots add column if not exists flag_count integer not null default 0
 -- security definer + fixed search_path: same reasoning as confirm_spot
 -- above — needs to keep UPDATE-ing `spots` under its own privileges once
 -- anon's direct UPDATE grant is revoked below.
-create or replace function flag_spot(spot_id uuid, threshold integer default 2)
+create or replace function flag_spot(spot_id uuid)
 returns void as $$
   update spots
   set flag_count = flag_count + 1,
-      status = case when status = 'pending' and flag_count + 1 >= threshold then 'rejected' else status end
+      status = case when status = 'pending' and flag_count + 1 >= 2 then 'rejected' else status end
   where id = spot_id;
 $$ language sql security definer set search_path = public;
 

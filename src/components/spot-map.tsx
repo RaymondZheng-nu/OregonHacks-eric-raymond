@@ -286,6 +286,11 @@ export function SpotMap({
     picnic,
   });
   const [debouncedFiltersTick, setDebouncedFiltersTick] = useState(0);
+  // Bumped every time filters change, independent of the debounce timer —
+  // lets an in-flight fetch started under the old filters recognize it's
+  // stale and drop its own result instead of clobbering a newer one
+  // (or the instant "0 results" state below) when it resolves late.
+  const filterRevisionRef = useRef(0);
   const isFirstFilterRenderRef = useRef(true);
   useEffect(() => {
     // Ref writes must happen in an effect, not during render (React forbids
@@ -294,6 +299,7 @@ export function SpotMap({
     // debouncedFiltersTick's own (delayed) update ever lets the fetch effect
     // below re-read filtersRef.current.
     filtersRef.current = { categoryList, minParkAreaM2, advancedFilters, activity, picnic };
+    filterRevisionRef.current += 1;
     if (isFirstFilterRenderRef.current) {
       isFirstFilterRenderRef.current = false;
       return;
@@ -368,6 +374,7 @@ export function SpotMap({
     if (categoryList.length === 0) return;
 
     let cancelled = false;
+    const filterRevision = filterRevisionRef.current;
     getVerifiedSpotsInBounds(viewport.bounds, {
       limit: VIEWPORT_FETCH_LIMIT,
       categories: categoryList,
@@ -377,7 +384,7 @@ export function SpotMap({
       picnic,
     })
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled || filterRevision !== filterRevisionRef.current) return;
         hasFetchedRef.current = true;
         setSpots(result);
         onViewChange?.({ count: result.length, mode: "markers" });

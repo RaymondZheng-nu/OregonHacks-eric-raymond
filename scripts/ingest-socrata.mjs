@@ -183,6 +183,7 @@ async function main() {
   console.log(
     `Done. inserted=${inserted} deduped=${deduped} skipped(category)=${skippedCategory} skipped(no name)=${skippedNoName} skipped(no coords)=${skippedNoCoords} skipped(dedup error)=${skippedDedupError} total=${records.length}`
   );
+  if (skippedDedupError > 0) process.exitCode = 1;
 }
 
 main();

@@ -355,6 +355,8 @@ async function main() {
   console.log(
     `Done. inserted=${inserted} deduped=${deduped} near_parent=${skippedNearParent} skipped(no name)=${skippedNoName} skipped(no coords)=${skippedNoCoords} skipped(too small)=${skippedTooSmall} skipped(dedup error)=${skippedDedupError} total=${elements.length}`
   );
+  // partial run, not a clean one — let CI/cron catch it instead of quietly accepting incomplete ingestion
+  if (skippedDedupError > 0) process.exitCode = 1;
 }
 
 main();

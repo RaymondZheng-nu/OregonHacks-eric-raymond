@@ -49,12 +49,13 @@ function readJson<T>(storage: Storage, key: string, fallback: T): T {
 // uncaught write failure from inside a swipe-deck save/skip button handler
 // contradicts that; this makes a failed write a silent no-op instead of an
 // uncaught exception.
-function writeJson(storage: Storage, key: string, value: unknown): void {
+function writeJson(storage: Storage, key: string, value: unknown): boolean {
   try {
     storage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    // Soft-fail: the in-memory state the caller already computed stays
-    // correct for this session, it just won't persist across reloads.
+    // quota exceeded or private-browsing storage lockout — caller decides what to do
+    return false;
   }
 }
 
@@ -84,8 +85,7 @@ export function saveSpot(spot: Spot): boolean {
       savedAt: new Date().toISOString(),
     },
   ];
-  writeJson(window.localStorage, SAVED_KEY, next);
-  return true;
+  return writeJson(window.localStorage, SAVED_KEY, next);
 }
 
 export function removeSavedSpot(id: string): void {

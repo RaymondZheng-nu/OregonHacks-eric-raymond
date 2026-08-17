@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PlusIcon, MapPinIcon } from "lucide-react";
@@ -74,11 +74,18 @@ export function AddSpotDialog({
     if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
   }
 
+  // Address lookup and "use my location" can both be in flight at once —
+  // whichever resolves last wins, so give each attempt an id and drop
+  // callbacks that aren't the latest by the time they land.
+  const locationRequestIdRef = useRef(0);
+
   async function locateFromInput() {
     if (!locationInput.trim() || locating) return;
+    const requestId = ++locationRequestIdRef.current;
     setLocating(true);
     try {
       const result = await resolveLocationInput(locationInput);
+      if (requestId !== locationRequestIdRef.current) return;
       if (result) {
         setResolvedLocation(result);
         setErrors((prev) => ({ ...prev, location: undefined }));
@@ -88,22 +95,27 @@ export function AddSpotDialog({
         );
       }
     } catch {
-      toast.error("Couldn't find that location — try again");
+      if (requestId === locationRequestIdRef.current) {
+        toast.error("Couldn't find that location — try again");
+      }
     } finally {
-      setLocating(false);
+      if (requestId === locationRequestIdRef.current) setLocating(false);
     }
   }
 
   function useMyLocation() {
+    const requestId = ++locationRequestIdRef.current;
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (requestId !== locationRequestIdRef.current) return;
         setResolvedLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocationInput(MY_LOCATION_LABEL);
         setLocating(false);
         if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
       },
       () => {
+        if (requestId !== locationRequestIdRef.current) return;
         toast.error(
           "Couldn't get your location — enter an address or paste a Google Maps link instead"
         );
