@@ -309,9 +309,13 @@ export function SpotMap({
     picnic,
   ]);
 
-  // Heatmap mode: the density RPC has no category param (deliberately — see
-  // schema.sql), so this only depends on viewport, not categoryList. Toggling
-  // a category badge while zoomed out is a documented no-op, not a bug.
+  // Heatmap mode: fetchSpotDensity (queries.ts) always passes its own fixed
+  // GREEN_SPACE_CATEGORIES, not this component's categoryList — the density
+  // view's category scope is an editorial decision (see that constant's
+  // comment), not the user's live filter selection, so this effect only
+  // depends on viewport. Toggling a category badge while zoomed out is a
+  // documented no-op, not a bug (the dropdowns are disabled in this mode
+  // for exactly this reason).
   useEffect(() => {
     if (!viewport || mode !== "heatmap") return;
     let cancelled = false;
@@ -328,6 +332,12 @@ export function SpotMap({
       })
       .catch((error) => {
         console.error("Failed to fetch spot density", error);
+        // Still report the mode even on failure — otherwise the page chrome
+        // (title/legend/hint, disabled filter dropdowns, all driven by the
+        // parent's own copy of `mode` from this callback) stays stuck
+        // showing stale marker-mode UI while the map underneath has already
+        // switched to a heatmap layer, just with no points in it.
+        if (!cancelled) onViewChange?.({ count: 0, mode: "heatmap" });
       });
 
     return () => {
