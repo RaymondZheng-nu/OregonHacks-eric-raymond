@@ -57,13 +57,20 @@ export default async function SwipePage({
   }
 
   return (
-    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
-      {/* md+ gets an explicit "Exit" link in SwipeNavBar instead. */}
+    // bg-accent, not bg-background: dark mode's --background is near-black,
+    // which read as a harsh solid void filling the empty space around the
+    // deck. bg-accent is meaningfully lighter (and has the brand's green
+    // tint), closer to the softer, less-than-pure-black feel the quiz
+    // dialog's own overlay has.
+    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-accent">
+      {/* Same corner position + ghost icon-button treatment as the quiz
+          dialog's own close button — one consistent exit affordance, not a
+          text link on desktop and a different icon on mobile. */}
       <Button
         variant="ghost"
         size="icon-sm"
         nativeButton={false}
-        className="fixed top-3 right-3 z-[1200] md:hidden"
+        className="fixed top-3 right-3 z-[1200]"
         render={
           <Link href="/">
             <XIcon aria-hidden="true" />

@@ -25,12 +25,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { SavedModal } from "@/components/saved-modal";
 import { SpotLocationPreview } from "@/components/spot-location-preview-dynamic";
 import { SuggestTipDialog } from "@/components/suggest-tip-dialog";
@@ -80,11 +74,65 @@ function useSpotTips(spotId: string | undefined): FreeActivityTip[] {
 }
 
 // Extra detail that doesn't fit the compact swipe card — full description,
-// a small map, and the full tip list with source links (the card only shows
-// tip text as a badge). Desktop has the room to show this beside the card at
-// all times; mobile gets it as a drag-up sheet instead (see MobileDetailSheet).
-function SpotDetailPanel({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }) {
+// and the full tip list with source links (the card only shows tip text as a
+// badge). Desktop has the room to show this beside the card at all times;
+// mobile gets it as a drag-up sheet instead (see MobileDetailSheet). "View on
+// map" (from the card) swaps this same panel into map mode rather than
+// opening a separate popup — one surface, not two.
+function SpotDetailPanel({
+  spot,
+  tips,
+  mode,
+  onBack,
+}: {
+  spot: Spot;
+  tips: FreeActivityTip[];
+  mode: "info" | "map";
+  onBack: () => void;
+}) {
   const verdict = getSpotVerdict(spot);
+
+  if (mode === "map") {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-base font-semibold leading-tight text-balance">
+            {spot.name}
+          </h2>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Back to spot details"
+            onClick={onBack}
+            className="shrink-0"
+          >
+            <XIcon aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="h-56 w-full overflow-hidden rounded-lg">
+          <SpotLocationPreview
+            lat={spot.lat}
+            lng={spot.lng}
+            category={spot.category}
+            draggable
+          />
+        </div>
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={
+            <a
+              href={directionsUrl(spot.lat, spot.lng)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Get directions
+            </a>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -95,13 +143,6 @@ function SpotDetailPanel({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }
         <p className="text-sm text-muted-foreground">
           {CATEGORY_META[spot.category].label}
         </p>
-      </div>
-      <div className="h-36 w-full overflow-hidden rounded-lg">
-        <SpotLocationPreview
-          lat={spot.lat}
-          lng={spot.lng}
-          category={spot.category}
-        />
       </div>
       {spot.description && (
         <p className="text-sm text-muted-foreground">{spot.description}</p>
@@ -169,15 +210,28 @@ const SHEET_HEIGHT_PX = 420;
 const SHEET_PEEK_PX = 64;
 const SHEET_DRAG_THRESHOLD = 60;
 
-function MobileDetailSheet({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }) {
-  const [expanded, setExpanded] = useState(false);
+function MobileDetailSheet({
+  spot,
+  tips,
+  mode,
+  onBack,
+  expanded,
+  onExpandedChange,
+}: {
+  spot: Spot;
+  tips: FreeActivityTip[];
+  mode: "info" | "map";
+  onBack: () => void;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+}) {
   const collapsedY = SHEET_HEIGHT_PX - SHEET_PEEK_PX;
 
   function handleDragEnd(_: unknown, info: PanInfo) {
     if (info.offset.y < -SHEET_DRAG_THRESHOLD || info.velocity.y < -400) {
-      setExpanded(true);
+      onExpandedChange(true);
     } else if (info.offset.y > SHEET_DRAG_THRESHOLD || info.velocity.y > 400) {
-      setExpanded(false);
+      onExpandedChange(false);
     }
   }
 
@@ -194,7 +248,7 @@ function MobileDetailSheet({ spot, tips }: { spot: Spot; tips: FreeActivityTip[]
     >
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => onExpandedChange(!expanded)}
         className="flex shrink-0 flex-col items-center gap-1.5 py-2.5"
         aria-expanded={expanded}
       >
@@ -211,7 +265,7 @@ function MobileDetailSheet({ spot, tips }: { spot: Spot; tips: FreeActivityTip[]
         </span>
       </button>
       <div className="flex-1 overflow-y-auto px-4 pb-6">
-        <SpotDetailPanel spot={spot} tips={tips} />
+        <SpotDetailPanel spot={spot} tips={tips} mode={mode} onBack={onBack} />
       </div>
     </motion.div>
   );
@@ -224,15 +278,16 @@ function SwipeCard({
   distanceMeters,
   filters,
   onResolved,
+  onViewOnMap,
   isTop,
 }: {
   spot: Spot;
   distanceMeters: number | null;
   filters: MatchFilters;
   onResolved: (direction: SwipeDirection) => void;
+  onViewOnMap: () => void;
   isTop: boolean;
 }) {
-  const [showLocation, setShowLocation] = useState(false);
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-12, 12]);
   const skipOpacity = useTransform(x, [-120, -20], [1, 0]);
@@ -272,15 +327,14 @@ function SwipeCard({
   const distanceLabel = formatDistance(distanceMeters);
 
   return (
-    <>
-      <motion.div
-        className="absolute inset-0"
-        style={isTop ? { x, rotate } : undefined}
-        drag={isTop ? "x" : false}
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.6}
-        // Spring snap-back when a release doesn't cross the threshold; tuned for
-        // a quick settle without visible overshoot.
+    <motion.div
+      className="absolute inset-0"
+      style={isTop ? { x, rotate } : undefined}
+      drag={isTop ? "x" : false}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.6}
+      // Spring snap-back when a release doesn't cross the threshold; tuned for
+      // a quick settle without visible overshoot.
         dragTransition={{ bounceStiffness: 400, bounceDamping: 24 }}
         onDragEnd={isTop ? handleDragEnd : undefined}
         exit={{
@@ -329,96 +383,97 @@ function SwipeCard({
               </>
             )}
           </div>
-          <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-4">
-            <p className="text-lg font-semibold leading-tight text-balance">
-              {spot.name}
-            </p>
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <span>{CATEGORY_META[spot.category].label}</span>
-              {distanceLabel && (
-                <>
-                  <span>·</span>
-                  <span>{distanceLabel}</span>
-                </>
-              )}
-            </div>
-
-            <div className="mt-0.5 flex flex-wrap gap-1.5">
-              {reasonChip && <Badge variant="outline">{reasonChip}</Badge>}
-              {spot.climbing_grade && (
-                <Badge variant="outline">
-                  <MountainIcon aria-hidden="true" />
-                  {spot.climbing_grade}
-                </Badge>
-              )}
-              {spot.size_class && (
-                <Badge variant="outline">
-                  <RulerIcon aria-hidden="true" />
-                  {spot.size_class}
-                </Badge>
-              )}
-              {spot.accessibility === "yes" && (
-                <Badge variant="outline">
-                  <AccessibilityIcon aria-hidden="true" />
-                  Wheelchair accessible
-                </Badge>
-              )}
-              {spot.accessibility === "limited" && (
-                <Badge variant="outline">
-                  <AccessibilityIcon aria-hidden="true" />
-                  Limited accessibility
-                </Badge>
-              )}
-              {spot.amenities?.map((amenity) => (
-                <Badge key={amenity} variant="outline">
-                  {amenity === "indoor_gym" && (
-                    <DumbbellIcon aria-hidden="true" />
-                  )}
-                  {formatAmenity(amenity)}
-                </Badge>
-              ))}
-              {tips.map((tip) => (
-                <Badge key={tip.id} variant="outline">
-                  <TicketIcon aria-hidden="true" />
-                  {tip.tip}
-                </Badge>
-              ))}
-            </div>
-
-            {spot.description && (
-              <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
-                {spot.description}
+          <div className="flex flex-1 flex-col overflow-hidden p-4">
+            {/* Scrollable middle, pinned action row below — badges/tips can run
+                long enough to push a scrolling action row half offscreen, which
+                read as the card being clipped. */}
+            <div className="flex-1 space-y-1.5 overflow-y-auto">
+              <p className="text-lg font-semibold leading-tight text-balance">
+                {spot.name}
               </p>
-            )}
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <span>{CATEGORY_META[spot.category].label}</span>
+                {distanceLabel && (
+                  <>
+                    <span>·</span>
+                    <span>{distanceLabel}</span>
+                  </>
+                )}
+              </div>
 
-            {spot.reddit_citation_url && (
-              <a
-                href={spot.reddit_citation_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-              >
-                &ldquo;{spot.reddit_citation_snippet}&rdquo; — r/{spot.reddit_citation_subreddit}
-              </a>
-            )}
+              <div className="mt-0.5 flex flex-wrap gap-1.5">
+                {reasonChip && <Badge variant="outline">{reasonChip}</Badge>}
+                {spot.climbing_grade && (
+                  <Badge variant="outline">
+                    <MountainIcon aria-hidden="true" />
+                    {spot.climbing_grade}
+                  </Badge>
+                )}
+                {spot.size_class && (
+                  <Badge variant="outline">
+                    <RulerIcon aria-hidden="true" />
+                    {spot.size_class}
+                  </Badge>
+                )}
+                {spot.accessibility === "yes" && (
+                  <Badge variant="outline">
+                    <AccessibilityIcon aria-hidden="true" />
+                    Wheelchair accessible
+                  </Badge>
+                )}
+                {spot.accessibility === "limited" && (
+                  <Badge variant="outline">
+                    <AccessibilityIcon aria-hidden="true" />
+                    Limited accessibility
+                  </Badge>
+                )}
+                {spot.amenities?.map((amenity) => (
+                  <Badge key={amenity} variant="outline">
+                    {amenity === "indoor_gym" && (
+                      <DumbbellIcon aria-hidden="true" />
+                    )}
+                    {formatAmenity(amenity)}
+                  </Badge>
+                ))}
+                {tips.map((tip) => (
+                  <Badge key={tip.id} variant="outline">
+                    <TicketIcon aria-hidden="true" />
+                    {tip.tip}
+                  </Badge>
+                ))}
+              </div>
 
-            <p
-              className={cn(
-                "text-xs",
-                verdict.tone === "caution"
-                  ? "text-destructive"
-                  : "text-muted-foreground",
+              {spot.description && (
+                <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
+                  {spot.description}
+                </p>
               )}
-            >
-              {verdict.label}
-            </p>
 
-            <div className="mt-1 flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowLocation(true)}
+              {spot.reddit_citation_url && (
+                <a
+                  href={spot.reddit_citation_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-xs text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  &ldquo;{spot.reddit_citation_snippet}&rdquo; — r/{spot.reddit_citation_subreddit}
+                </a>
+              )}
+
+              <p
+                className={cn(
+                  "text-xs",
+                  verdict.tone === "caution"
+                    ? "text-destructive"
+                    : "text-muted-foreground",
+                )}
               >
+                {verdict.label}
+              </p>
+            </div>
+
+            <div className="mt-2 flex shrink-0 items-center gap-3 pt-2">
+              <Button variant="outline" size="sm" onClick={onViewOnMap}>
                 View on map
               </Button>
               <Link
@@ -435,38 +490,7 @@ function SwipeCard({
           </div>
         </div>
       </motion.div>
-      {/* Popup, not a Link to /explore: navigating away unmounts the deck's
-          state, so browser-back lands on a fresh homepage instead of this deck. */}
-      <Dialog open={showLocation} onOpenChange={setShowLocation}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{spot.name}</DialogTitle>
-          </DialogHeader>
-          <div className="h-56 w-full overflow-hidden rounded-lg">
-            <SpotLocationPreview
-              lat={spot.lat}
-              lng={spot.lng}
-              category={spot.category}
-              draggable
-            />
-          </div>
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={
-              <a
-                href={directionsUrl(spot.lat, spot.lng)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Get directions
-              </a>
-            }
-          />
-        </DialogContent>
-      </Dialog>
-    </>
-  );
+    );
 }
 
 // How many cards render for the peek-behind stack; only the front one drags.
@@ -484,9 +508,10 @@ function KeyHint({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Full-width header bar. On mobile this collapses to the same three links,
-// tightly packed; the keyboard hints and explicit "Exit" only make sense once
-// there's a keyboard and room to show them, so those are md+ only.
+// Full-width header bar. The exit control lives outside this bar entirely —
+// a small corner icon button matching the quiz dialog's close button, in
+// swipe/page.tsx — so it stays identical across breakpoints instead of a text
+// link on desktop and a separate icon on mobile.
 function SwipeNavBar({
   savedCount,
   onSavedCountChange,
@@ -504,7 +529,7 @@ function SwipeNavBar({
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <MapIcon aria-hidden="true" className="size-4" />
-          Map view
+          General map view
         </Link>
         <span className="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
           <KeyHint>←</KeyHint> skip
@@ -533,14 +558,6 @@ function SwipeNavBar({
             </span>
           )}
         </button>
-        {/* Mobile keeps the fixed corner X in swipe/page.tsx instead. */}
-        <Link
-          href="/"
-          className="hidden items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground md:flex"
-        >
-          <XIcon aria-hidden="true" className="size-4" />
-          Exit
-        </Link>
       </div>
       <SavedModal
         open={showSaved}
@@ -595,6 +612,13 @@ export function SpotSwipeDeck({
   // Filtered spots not yet revealed; drained by generateMore(). Not state — it
   // never renders, only gates the button via hasMoreInPool.
   const poolRef = useRef<Spot[]>([]);
+  // "View on map" (from the card) swaps the panel/sheet into map mode instead
+  // of opening a separate popup. Declared here (not lower, near topSpot) so
+  // resolveTop/undo/generateMore below can reference the setters without a
+  // temporal-dead-zone issue — they're plain functions, not hooks, so nothing
+  // else requires this ordering, but the setters must exist before them.
+  const [detailMode, setDetailMode] = useState<"info" | "map">("info");
+  const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
 
   useEffect(() => {
     // One-time hydration after mount. Excludes spots skipped this session and
@@ -627,6 +651,9 @@ export function SpotSwipeDeck({
     const [top, ...rest] = deckRef.current;
     if (!top) return;
 
+    setDetailMode("info");
+    setMobileSheetExpanded(false);
+
     let savedNew = false;
     if (direction === "right") {
       savedNew = saveSpot(top);
@@ -649,6 +676,9 @@ export function SpotSwipeDeck({
     if (currentHistory.length === 0) return;
     const last = currentHistory[currentHistory.length - 1];
 
+    setDetailMode("info");
+    setMobileSheetExpanded(false);
+
     if (last.direction === "right") {
       if (last.savedNew) {
         removeSavedSpot(last.spot.id);
@@ -670,6 +700,8 @@ export function SpotSwipeDeck({
     const next = poolRef.current.slice(0, REVEAL_STEP);
     poolRef.current = poolRef.current.slice(REVEAL_STEP);
     deckRef.current = next;
+    setDetailMode("info");
+    setMobileSheetExpanded(false);
     setDeck(next);
     setTotalCount(next.length);
     setHasMoreInPool(poolRef.current.length > 0);
@@ -698,6 +730,15 @@ export function SpotSwipeDeck({
   // early return below so hook order stays stable regardless of deck.length.
   const topSpot = deck[0];
   const topSpotTips = useSpotTips(topSpot?.id);
+
+  function handleViewOnMap() {
+    setDetailMode("map");
+    setMobileSheetExpanded(true);
+  }
+
+  function handleBackToInfo() {
+    setDetailMode("info");
+  }
 
   if (deck.length === 0) {
     return (
@@ -769,6 +810,7 @@ export function SpotSwipeDeck({
                     }
                     filters={filters}
                     onResolved={resolveTop}
+                    onViewOnMap={handleViewOnMap}
                     isTop={i === 0}
                   />
                 </motion.div>
@@ -827,13 +869,25 @@ export function SpotSwipeDeck({
             room for a permanent side panel at phone widths. */}
         {topSpot && (
           <div className="hidden max-h-[min(80vh,640px)] w-80 shrink-0 self-center overflow-y-auto rounded-2xl border bg-card p-5 md:block">
-            <SpotDetailPanel spot={topSpot} tips={topSpotTips} />
+            <SpotDetailPanel
+              spot={topSpot}
+              tips={topSpotTips}
+              mode={detailMode}
+              onBack={handleBackToInfo}
+            />
           </div>
         )}
       </div>
 
       {topSpot && (
-        <MobileDetailSheet key={topSpot.id} spot={topSpot} tips={topSpotTips} />
+        <MobileDetailSheet
+          spot={topSpot}
+          tips={topSpotTips}
+          mode={detailMode}
+          onBack={handleBackToInfo}
+          expanded={mobileSheetExpanded}
+          onExpandedChange={setMobileSheetExpanded}
+        />
       )}
     </div>
   );
