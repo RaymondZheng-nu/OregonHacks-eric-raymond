@@ -4,7 +4,7 @@
 
 SET check_function_bodies = false;
 
-DROP EXTENSION pg_net;
+DROP EXTENSION IF EXISTS pg_net;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT DELETE, INSERT, SELECT, UPDATE ON TABLES TO anon;
 
