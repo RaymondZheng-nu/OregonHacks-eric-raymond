@@ -83,6 +83,23 @@ out geom;
 `.trim();
 }
 
+// OSM has no single climbing grade scale — French sport, YDS (roped routes),
+// and Hueco/V-scale (boulder problems) aren't a clean conversion — so this
+// takes whichever tag is present, preferred in that order, and stores it
+// verbatim rather than normalizing. `yds_class` shows up alongside/instead
+// of `yds` on mapper-authored route nodes (e.g. Mountain Project imports).
+function extractClimbingGrade(tags = {}) {
+  return (
+    tags["climbing:grade:french"] ??
+    tags["climbing:grade:yds"] ??
+    tags["climbing:grade:yds_class"] ??
+    tags["climbing:grade:hueco"] ??
+    tags["climbing:grade:font"] ??
+    tags["climbing:grade"] ??
+    null
+  );
+}
+
 function mapCategory(tags = {}) {
   if (tags.sport === "climbing") return "climbing";
   if (tags.amenity === "bird_hide" || tags.leisure === "bird_hide") return "birdwatching";
@@ -161,6 +178,13 @@ async function findNearbyVerifiedSpot(lat, lng, radiusMeters) {
 // that paste happens) degrades to "containment check finds nothing" instead
 // of crashing the whole ingestion run.
 let containmentColumnMissing = false;
+
+// Same gap as area_m2/containment above, but discovered per-insert instead
+// of via a separate read: the first climbing insert either succeeds (column
+// live) or fails with a missing-column error, at which point every
+// subsequent climbing row in this run stops attempting to write the field —
+// no need to fail every single one individually once the answer is known.
+let climbingGradeColumnMissing = false;
 
 async function findContainingParent(lat, lng, category, areaM2) {
   if (containmentColumnMissing) return null;
@@ -266,23 +290,39 @@ async function main() {
     // happens. Once the column is live, a scoped backfill pass (same shape
     // as scripts/backfill-area.mjs) can pick up rows inserted in the
     // meantime — computing area here and discarding it costs nothing today.
-    const { data, error } = await supabase
+    const climbingGrade = category === "climbing" ? extractClimbingGrade(element.tags) : null;
+    const basePayload = {
+      name,
+      description: element.tags?.description ?? null,
+      category,
+      source: "osm",
+      status: "verified",
+      lat: coords.lat,
+      lng: coords.lng,
+      photo_url: null,
+      external_id: `${element.type}/${element.id}`,
+    };
+    const includeClimbingGrade = climbingGrade !== null && !climbingGradeColumnMissing;
+
+    let { data, error } = await supabase
       .from("spots")
       .upsert(
-        {
-          name,
-          description: element.tags?.description ?? null,
-          category,
-          source: "osm",
-          status: "verified",
-          lat: coords.lat,
-          lng: coords.lng,
-          photo_url: null,
-          external_id: `${element.type}/${element.id}`,
-        },
+        includeClimbingGrade ? { ...basePayload, climbing_grade: climbingGrade } : basePayload,
         { onConflict: "source,external_id", ignoreDuplicates: true }
       )
       .select();
+
+    // PGRST204: PostgREST's "column not found in schema cache" — the exact
+    // signal that supabase/schema.sql's climbing_grade migration hasn't been
+    // pasted into the SQL Editor yet. Retry once without the field so this
+    // one row (and every climbing row after it, via the flag) still inserts.
+    if (error?.code === "PGRST204" && includeClimbingGrade) {
+      climbingGradeColumnMissing = true;
+      ({ data, error } = await supabase
+        .from("spots")
+        .upsert(basePayload, { onConflict: "source,external_id", ignoreDuplicates: true })
+        .select());
+    }
 
     if (error) {
       console.error(`  failed to insert "${name}": ${error.message}`);

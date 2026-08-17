@@ -4,7 +4,7 @@ import { ClipboardListIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
 import { FeaturedSpotlight } from "@/components/featured-spotlight";
 import { SpotlightCarousel } from "@/components/spotlight-carousel";
-import { StartSessionDialog } from "@/components/start-session-dialog";
+import { SessionQuestionnaire } from "@/components/session-questionnaire";
 import { StickyMobileCta } from "@/components/sticky-mobile-cta";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ export default async function LandingPage() {
             <p className="text-sm font-medium text-muted-foreground">
               Feeling adventurous?
             </p>
-            <StartSessionDialog large />
+            <SessionQuestionnaire large />
             <Button
               variant="outline"
               size="lg"

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CompassIcon } from "lucide-react";
+import { CompassIcon, Footprints, Bike, Car, TrainFront } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,15 +19,46 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
 import { VIBE_OPTIONS } from "@/lib/vibes";
+import { clampRadiusMeters } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import type { SpotCategory } from "@/lib/types";
 
-const MILES_TO_METERS = 1609.34;
 const MY_LOCATION_LABEL = "My current location";
 const TOTAL_STEPS = 3;
 
+type TransportMode = "walk" | "bike" | "drive" | "transit";
+
+// Straight-line radius, not a routed isochrone — this app has no routing API,
+// so travel time is approximated from a flat average speed per mode. Good
+// enough to size the map's initial viewport; not meant to promise "reachable
+// in N minutes" accuracy the way real turn-by-turn routing would.
+const MODE_SPEED_KMH: Record<TransportMode, number> = {
+  walk: 5,
+  bike: 15,
+  drive: 40,
+  transit: 20,
+};
+
+const MODE_META: Record<
+  TransportMode,
+  { label: string; icon: typeof Footprints }
+> = {
+  walk: { label: "Walk", icon: Footprints },
+  bike: { label: "Bike", icon: Bike },
+  drive: { label: "Drive", icon: Car },
+  transit: { label: "Transit", icon: TrainFront },
+};
+
+const DEFAULT_MODE: TransportMode = "walk";
+const DEFAULT_MINUTES = "15";
+
+function minutesToRadiusMeters(minutes: number, mode: TransportMode): number {
+  const metersPerMinute = (MODE_SPEED_KMH[mode] * 1000) / 60;
+  return Math.round(minutes * metersPerMinute);
+}
+
 async function geocodeAddress(
-  address: string
+  address: string,
 ): Promise<{ lat: number; lng: number } | null> {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", address);
@@ -48,7 +79,14 @@ async function geocodeAddress(
   return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
 }
 
-export function StartSessionDialog({
+// Dialog-wrapped questionnaire — same trigger/API shape as the old
+// StartSessionDialog (fullWidth prop, "Start session" trigger button, so
+// sticky-mobile-cta.tsx's usage carries over unchanged), but with a richer,
+// multi-step form (category + vibe + transport mode/travel time, not just a
+// flat miles radius). Submits to /swipe — the swipe deck is this app's
+// centerpiece flow, so the quiz's job is to seed it, not to hand off to a
+// separate results list.
+export function SessionQuestionnaire({
   fullWidth,
   large,
 }: {
@@ -70,8 +108,12 @@ export function StartSessionDialog({
     lat: number;
     lng: number;
   } | null>(null);
-  const [maxMiles, setMaxMiles] = useState("5");
-  const [errors, setErrors] = useState<{ categories?: string; address?: string }>({});
+  const [mode, setMode] = useState<TransportMode>(DEFAULT_MODE);
+  const [maxMinutes, setMaxMinutes] = useState(DEFAULT_MINUTES);
+  const [errors, setErrors] = useState<{
+    categories?: string;
+    address?: string;
+  }>({});
 
   function toggleCategory(category: SpotCategory) {
     setCategories((prev) => {
@@ -89,7 +131,10 @@ export function StartSessionDialog({
 
   function goNext() {
     if (step === 0 && categories.size === 0) {
-      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
+      setErrors((prev) => ({
+        ...prev,
+        categories: "Pick at least one kind of spot",
+      }));
       return;
     }
     setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
@@ -118,7 +163,7 @@ export function StartSessionDialog({
       () => {
         toast.error("Couldn't get your location, enter an address instead");
         setLocating(false);
-      }
+      },
     );
   }
 
@@ -126,7 +171,10 @@ export function StartSessionDialog({
     e.preventDefault();
 
     if (categories.size === 0) {
-      setErrors((prev) => ({ ...prev, categories: "Pick at least one kind of spot" }));
+      setErrors((prev) => ({
+        ...prev,
+        categories: "Pick at least one kind of spot",
+      }));
       return;
     }
 
@@ -135,7 +183,8 @@ export function StartSessionDialog({
 
     const selectedVibe = VIBE_OPTIONS.find((option) => option.value === vibe);
     if (selectedVibe) {
-      if (selectedVibe.kind === "activity") params.set("activity", selectedVibe.activity);
+      if (selectedVibe.kind === "activity")
+        params.set("activity", selectedVibe.activity);
       else params.set("picnic", "1");
     }
 
@@ -158,13 +207,16 @@ export function StartSessionDialog({
       params.set("lat", String(coords.lat));
       params.set("lng", String(coords.lng));
 
-      const miles = parseFloat(maxMiles);
-      if (Number.isFinite(miles) && miles > 0) {
-        params.set("radius", String(Math.round(miles * MILES_TO_METERS)));
+      const minutes = parseFloat(maxMinutes);
+      if (Number.isFinite(minutes) && minutes > 0) {
+        params.set(
+          "radius",
+          String(clampRadiusMeters(minutesToRadiusMeters(minutes, mode))),
+        );
       }
     }
 
-    router.push(`/results?${params.toString()}`);
+    router.push(`/swipe?${params.toString()}`);
   }
 
   return (
@@ -176,7 +228,7 @@ export function StartSessionDialog({
             className={cn(
               fullWidth && "w-full",
               large &&
-                "h-auto px-8 py-4 text-2xl font-bold tracking-tight transition-transform duration-200 ease-out hover:scale-[1.02]"
+                "h-auto px-8 py-4 text-2xl font-bold tracking-tight transition-transform duration-200 ease-out hover:scale-[1.02]",
             )}
           >
             Take a quiz
@@ -187,7 +239,8 @@ export function StartSessionDialog({
         <DialogHeader>
           <DialogTitle>Find your spot</DialogTitle>
           <DialogDescription>
-            A couple quick questions and we&apos;ll point you to real spots nearby.
+            A couple quick questions and we&apos;ll point you to real spots
+            nearby.
           </DialogDescription>
         </DialogHeader>
 
@@ -197,7 +250,7 @@ export function StartSessionDialog({
               key={i}
               className={cn(
                 "h-1.5 rounded-full transition-all duration-200 ease-out",
-                i === step ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30"
+                i === step ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30",
               )}
             />
           ))}
@@ -228,12 +281,14 @@ export function StartSessionDialog({
                         }
                         className={cn(
                           "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
-                          !active && "opacity-40"
+                          !active && "opacity-40",
                         )}
                         style={{
                           borderColor: meta.color,
                           color: active ? meta.color : undefined,
-                          backgroundColor: active ? `${meta.color}1a` : undefined,
+                          backgroundColor: active
+                            ? `${meta.color}1a`
+                            : undefined,
                         }}
                       >
                         {meta.label}
@@ -242,7 +297,9 @@ export function StartSessionDialog({
                   })}
                 </div>
                 {errors.categories && (
-                  <p className="text-xs text-destructive">{errors.categories}</p>
+                  <p className="text-xs text-destructive">
+                    {errors.categories}
+                  </p>
                 )}
               </div>
             )}
@@ -268,7 +325,7 @@ export function StartSessionDialog({
                           "h-9 cursor-pointer select-none px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
                           active
                             ? "border-primary bg-primary/10 text-primary"
-                            : "opacity-40"
+                            : "opacity-40",
                         )}
                       >
                         {option.label}
@@ -292,7 +349,11 @@ export function StartSessionDialog({
                         if (e.target.value !== MY_LOCATION_LABEL) {
                           setMyLocationCoords(null);
                         }
-                        if (errors.address) setErrors((prev) => ({ ...prev, address: undefined }));
+                        if (errors.address)
+                          setErrors((prev) => ({
+                            ...prev,
+                            address: undefined,
+                          }));
                       }}
                       placeholder="Address, city, or zip code"
                       aria-invalid={!!errors.address}
@@ -312,22 +373,62 @@ export function StartSessionDialog({
                     <p className="text-xs text-destructive">{errors.address}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Optional. Skip this to browse spots across the whole country.
+                      Optional. Skip this to browse spots across the whole
+                      country.
                     </p>
                   )}
                 </div>
 
                 {address.trim() && (
-                  <div className="space-y-2">
-                    <Label htmlFor="max-miles">How far will you go? (miles)</Label>
-                    <Input
-                      id="max-miles"
-                      type="number"
-                      min="1"
-                      inputMode="numeric"
-                      value={maxMiles}
-                      onChange={(e) => setMaxMiles(e.target.value)}
-                    />
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Getting there by</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {(
+                          Object.entries(MODE_META) as [
+                            TransportMode,
+                            (typeof MODE_META)[TransportMode],
+                          ][]
+                        ).map(([key, meta]) => {
+                          const active = mode === key;
+                          const Icon = meta.icon;
+                          return (
+                            <Badge
+                              key={key}
+                              variant="outline"
+                              render={
+                                <button
+                                  type="button"
+                                  aria-pressed={active}
+                                  onClick={() => setMode(key)}
+                                />
+                              }
+                              className={cn(
+                                "h-9 cursor-pointer select-none gap-1.5 px-3.5 transition-[opacity,background-color,color] duration-200 ease-out",
+                                !active && "opacity-40",
+                              )}
+                            >
+                              <Icon aria-hidden="true" className="size-3.5" />
+                              {meta.label}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="max-minutes">
+                        Max travel time (minutes)
+                      </Label>
+                      <Input
+                        id="max-minutes"
+                        type="number"
+                        min="1"
+                        inputMode="numeric"
+                        value={maxMinutes}
+                        onChange={(e) => setMaxMinutes(e.target.value)}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
