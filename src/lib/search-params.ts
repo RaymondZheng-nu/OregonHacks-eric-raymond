@@ -1,12 +1,19 @@
 import type { SpotCategory } from "@/lib/types";
 import { CATEGORY_META } from "@/lib/categories";
-import { boundingBox, clampRadiusMeters, isValidLatLng, type BoundingBox } from "@/lib/geo";
+import {
+  boundingBox,
+  clampRadiusMeters,
+  isValidLatLng,
+  type BoundingBox,
+} from "@/lib/geo";
 
 // Shared by /explore and /swipe — both pages read the same querystring
 // shape the quiz produces (cats/activity/picnic/lat/lng/radius), so parsing
 // lived in one place only from the start; this file just gives it a name
 // once a second page needed it too.
-export function parseCategories(raw: string | undefined): SpotCategory[] | null {
+export function parseCategories(
+  raw: string | undefined,
+): SpotCategory[] | null {
   if (!raw) return null;
   const known = new Set(Object.keys(CATEGORY_META));
   const parsed = raw.split(",").filter((c) => known.has(c)) as SpotCategory[];
@@ -29,7 +36,7 @@ export type ParsedSearch = {
 };
 
 export function parseSearchParams(
-  params: Record<string, string | undefined>
+  params: Record<string, string | undefined>,
 ): ParsedSearch {
   const rawLat = parseNumber(params.lat);
   const rawLng = parseNumber(params.lng);
@@ -37,7 +44,8 @@ export function parseSearchParams(
   // location" rather than passed through — feeding boundingBox a bogus
   // lat/lng produces a nonsensical or near-global box instead of just
   // falling back to the default center.
-  const hasLocation = rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
+  const hasLocation =
+    rawLat !== null && rawLng !== null && isValidLatLng(rawLat, rawLng);
 
   return {
     categories: parseCategories(params.cats),
@@ -67,6 +75,27 @@ export function boundsFromSearch(parsed: ParsedSearch): {
     parsed.lat !== null && parsed.lng !== null
       ? { lat: parsed.lat, lng: parsed.lng }
       : DEFAULT_CENTER;
-  const radius = clampRadiusMeters(parsed.radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS);
+  const radius = clampRadiusMeters(
+    parsed.radiusMeters ?? DEFAULT_VIEWPORT_RADIUS_METERS,
+  );
   return { center, bounds: boundingBox(center.lat, center.lng, radius) };
+}
+
+// Round-trips a parsed search back into the querystring shape /explore
+// expects, so both /swipe's full-page route and the swipe modal can build
+// their "view this spot on the map" links without re-deriving the original
+// search from scratch. Pure/isomorphic (no server-only imports), so it works
+// from a client component too.
+export function buildExploreParams(parsed: ParsedSearch): URLSearchParams {
+  const exploreParams = new URLSearchParams();
+  if (parsed.categories) exploreParams.set("cats", parsed.categories.join(","));
+  if (parsed.activity) exploreParams.set("activity", parsed.activity);
+  if (parsed.picnic) exploreParams.set("picnic", "1");
+  if (parsed.lat !== null && parsed.lng !== null) {
+    exploreParams.set("lat", String(parsed.lat));
+    exploreParams.set("lng", String(parsed.lng));
+    if (parsed.radiusMeters)
+      exploreParams.set("radius", String(parsed.radiusMeters));
+  }
+  return exploreParams;
 }

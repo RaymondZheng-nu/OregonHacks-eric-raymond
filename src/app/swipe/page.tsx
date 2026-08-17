@@ -7,7 +7,11 @@ import {
   getVerifiedSpotsInBounds,
   getVerifiedSpotsNationwide,
 } from "@/lib/supabase/queries.server";
-import { boundsFromSearch, parseSearchParams } from "@/lib/search-params";
+import {
+  boundsFromSearch,
+  buildExploreParams,
+  parseSearchParams,
+} from "@/lib/search-params";
 import { shuffle } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -62,16 +66,7 @@ export default async function SwipePage({
   // Forwarded to the client component so it can build both the nav bar's
   // "Map view" link and each card's "View on map" link without re-deriving
   // the original search from scratch.
-  const exploreParams = new URLSearchParams();
-  if (parsed.categories) exploreParams.set("cats", parsed.categories.join(","));
-  if (parsed.activity) exploreParams.set("activity", parsed.activity);
-  if (parsed.picnic) exploreParams.set("picnic", "1");
-  if (hasLocation) {
-    exploreParams.set("lat", String(parsed.lat));
-    exploreParams.set("lng", String(parsed.lng));
-    if (parsed.radiusMeters)
-      exploreParams.set("radius", String(parsed.radiusMeters));
-  }
+  const exploreParams = buildExploreParams(parsed);
 
   return (
     <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background">
