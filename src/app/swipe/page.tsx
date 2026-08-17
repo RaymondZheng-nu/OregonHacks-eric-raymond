@@ -13,7 +13,7 @@ import { shuffleWithPhotosFirst } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "Swipe Spots",
   description:
-    "Swipe through nearby parks, gardens, and quiet spots — save the ones worth visiting.",
+    "Swipe through nearby parks, gardens, and quiet spots, and save the ones worth visiting.",
 };
 
 // A wider pool than any single batch needs, so "Generate more" has real

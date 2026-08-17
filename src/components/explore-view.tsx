@@ -291,8 +291,8 @@ export function ExploreView({
                   />
                   <p className="text-xs text-muted-foreground">
                     Filters out traffic islands and other junk-sized
-                    &ldquo;park&rdquo; spots. Only applies to the park and other categories —
-                    climbing, gardens, and the rest are unaffected.
+                    &ldquo;park&rdquo; spots. Only applies to the park and other categories.
+                    Climbing, gardens, and the rest are unaffected.
                   </p>
                 </div>
 
@@ -310,7 +310,7 @@ export function ExploreView({
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Only spots with a known size are affected — leave all
+                    Only spots with a known size are affected. Leave all
                     unselected to include everything regardless of size.
                   </p>
                 </div>
@@ -360,7 +360,7 @@ export function ExploreView({
                       ))}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Grades are shown exactly as tagged in OpenStreetMap —
+                      Grades are shown exactly as tagged in OpenStreetMap.
                       French and YDS scales aren&apos;t converted between each other.
                     </p>
                   </div>
@@ -370,7 +370,7 @@ export function ExploreView({
           </Dialog>
           {isHeatmapMode && (
             <p className="text-xs text-muted-foreground">
-              Showing green space coverage — zoom in for spots and filters
+              Showing green space coverage. Zoom in for spots and filters
             </p>
           )}
           <Button
@@ -408,7 +408,7 @@ export function ExploreView({
               <p className="text-sm font-medium">Green space coverage</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Darker areas have more known parks and nature spots nearby.
-                Lighter areas may mean less green space — or just that we
+                Lighter areas may mean less green space, or just that we
                 haven&apos;t mapped that area yet.
               </p>
               <div className="mt-2 flex items-center gap-2">
@@ -428,8 +428,8 @@ export function ExploreView({
                 </span>
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
-                Full readings shown for the outlined regions (Portland, NYC)
-                — density elsewhere reflects unverified, uncleaned data.
+                Full readings shown for the outlined regions (Portland, NYC).
+                Density elsewhere reflects unverified, uncleaned data.
               </p>
             </div>
           </div>
@@ -443,7 +443,7 @@ export function ExploreView({
                     No {zeroSpotCategoryLabel} spots yet
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Nobody&apos;s added one here yet — know a spot like this?
+                    Nobody&apos;s added one here yet. Know a spot like this?
                   </p>
                   <div className="mt-3 flex justify-center">
                     <AddSpotDialog triggerSize="sm" />
