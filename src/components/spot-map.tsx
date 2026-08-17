@@ -279,6 +279,16 @@ function SpotMarker({
             >
               Get directions
             </a>
+            <a
+              href={`/spot/${spot.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground underline underline-offset-2"
+            >
+              Share
+            </a>
+          </div>
+          <div className="flex justify-end">
             <SuggestTipDialog spotId={spot.id} />
           </div>
         </div>

@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
+    "seed:tips": "node --env-file=.env.local scripts/seed-free-activity-tips.mjs",
     "backup:spots": "node --env-file=.env.local scripts/backup-spots.mjs",
     "backfill:area": "node scripts/backfill-area.mjs",
     "backfill:climbing-grade": "node scripts/backfill-climbing-grade.mjs",

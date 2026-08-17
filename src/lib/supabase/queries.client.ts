@@ -9,6 +9,7 @@ import {
   fetchVerifiedTips,
   submitFreeActivityTip,
   confirmTipRpc,
+  searchVerifiedSpots,
   type SubmitSpotInput,
   type SpotsInBoundsOptions,
 } from "@/lib/supabase/queries";
@@ -55,4 +56,8 @@ export async function submitTip(spotId: string, tip: string, sourceUrl: string |
 
 export async function confirmTip(tipId: string) {
   return confirmTipRpc(createClient(), tipId);
+}
+
+export async function searchSpots(query: string) {
+  return searchVerifiedSpots(createClient(), query);
 }

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ChevronDownIcon, ClipboardListIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import { AddSpotDialog } from "@/components/add-spot-dialog";
+import { SpotSearchBox } from "@/components/spot-search-box";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -220,6 +221,7 @@ export function ExploreView({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <SpotSearchBox />
           <div className="flex flex-col gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger

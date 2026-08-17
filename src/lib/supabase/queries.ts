@@ -427,6 +427,51 @@ export async function fetchVerifiedSpotCount(
   return count ?? 0;
 }
 
+export async function fetchSpotById(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<Spot | null> {
+  const { data, error } = await supabase
+    .from("spots")
+    .select("*")
+    .eq("id", id)
+    .eq("status", "verified")
+    .maybeSingle();
+
+  if (error) {
+    console.error("fetchSpotById failed", error);
+    return null;
+  }
+  return (data as Spot) ?? null;
+}
+
+export type SpotSearchResult = Pick<Spot, "id" | "name" | "category" | "lat" | "lng">;
+
+// Name-only search for the explore header's search box — not a substitute for
+// the map's real filtering, just a fast way to jump straight to a known spot.
+export async function searchVerifiedSpots(
+  supabase: SupabaseClient,
+  query: string,
+  limit = 8,
+): Promise<SpotSearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const { data, error } = await supabase
+    .from("spots")
+    .select("id, name, category, lat, lng")
+    .eq("status", "verified")
+    .ilike("name", `%${trimmed}%`)
+    .order("name")
+    .limit(limit);
+
+  if (error) {
+    console.error("searchVerifiedSpots failed", error);
+    return [];
+  }
+  return (data ?? []) as SpotSearchResult[];
+}
+
 // Generous enough to never bother a real submission, just enough to reject a
 // pasted document. Exported so add-spot-dialog.tsx validates the same limit.
 export const MAX_NAME_LENGTH = 200;

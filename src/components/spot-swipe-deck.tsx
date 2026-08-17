@@ -20,6 +20,7 @@ import {
   RulerIcon,
   DumbbellIcon,
   TicketIcon,
+  Share2Icon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -266,6 +267,15 @@ function SwipeCard({
               >
                 View on map
               </Button>
+              <Link
+                href={`/spot/${spot.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Share2Icon aria-hidden="true" className="size-3.5" />
+                Share
+              </Link>
               <SuggestTipDialog spotId={spot.id} />
             </div>
           </div>
