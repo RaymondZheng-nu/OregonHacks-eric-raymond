@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ChevronDownIcon, ClipboardListIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
@@ -125,6 +125,14 @@ export function ExploreView({
   // instead of it staying dismissed for the rest of the session.
   const [legendDismissed, setLegendDismissed] = useState(false);
   const isHeatmapMode = mapMode === "heatmap";
+  // Reset during render, not an effect — the standard React pattern for
+  // "adjust state when a prop/derived value changes" (avoids an extra
+  // render-then-cascade round trip an effect would need for the same reset).
+  const [prevIsHeatmapMode, setPrevIsHeatmapMode] = useState(isHeatmapMode);
+  if (isHeatmapMode !== prevIsHeatmapMode) {
+    setPrevIsHeatmapMode(isHeatmapMode);
+    if (!isHeatmapMode) setLegendDismissed(false);
+  }
   const isClimbingActive = activeCategories.has("climbing");
   // True only when every active category is known-empty; a mixed selection
   // still shows real spots and keeps the generic no-matches state.
@@ -149,10 +157,6 @@ export function ExploreView({
     }),
     [sizeClasses, amenities, wheelchairAccessibleOnly, climbingGrades, isClimbingActive]
   );
-
-  useEffect(() => {
-    if (!isHeatmapMode) setLegendDismissed(false);
-  }, [isHeatmapMode]);
 
   const selectedVibe = VIBE_OPTIONS.find((option) => option.value === activeVibe);
   const activeActivity = selectedVibe?.kind === "activity" ? selectedVibe.activity : undefined;

@@ -51,7 +51,6 @@ export default async function SpotOpengraphImage({
       >
         {spot.photo_url ? (
           // ImageResponse's own renderer, not next/image — fetches directly.
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={spot.photo_url}
             alt=""

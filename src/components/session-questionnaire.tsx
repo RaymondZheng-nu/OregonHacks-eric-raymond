@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CompassIcon, Footprints, Bike, Car, TrainFront } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SwipeModal } from "@/components/swipe-modal";
 import { CATEGORY_META, SELECTABLE_CATEGORIES } from "@/lib/categories";
 import { VIBE_OPTIONS } from "@/lib/vibes";
 import { clampRadiusMeters } from "@/lib/geo";
@@ -58,8 +58,7 @@ function minutesToRadiusMeters(minutes: number, mode: TransportMode): number {
 }
 
 // Multi-step quiz (category + vibe + location/travel time) that seeds the swipe
-// deck. Opens as a sibling Dialog rather than routing to /swipe, so the page
-// behind it stays mounted.
+// deck, then routes to /swipe with the answers as querystring params.
 export function SessionQuestionnaire({
   fullWidth,
   large,
@@ -68,8 +67,8 @@ export function SessionQuestionnaire({
   // Hero CTA uses this to stand out; the sticky mobile bar stays default.
   large?: boolean;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [swipeQuery, setSwipeQuery] = useState<URLSearchParams | null>(null);
   const [step, setStep] = useState(0);
   const [categories, setCategories] = useState<Set<SpotCategory>>(new Set());
   const [vibe, setVibe] = useState<string | null>(null);
@@ -208,12 +207,11 @@ export function SessionQuestionnaire({
     }
 
     setOpen(false);
-    setSwipeQuery(params);
+    router.push(`/swipe?${params.toString()}`);
   }
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogTrigger
           render={
             <Button
@@ -461,11 +459,7 @@ export function SessionQuestionnaire({
               )}
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-      {swipeQuery && (
-        <SwipeModal query={swipeQuery} onClose={() => setSwipeQuery(null)} />
-      )}
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }

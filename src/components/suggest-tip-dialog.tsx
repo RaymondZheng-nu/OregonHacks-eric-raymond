@@ -71,7 +71,7 @@ export function SuggestTipDialog({ spotId }: { spotId: string }) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="tip">What's free here?</Label>
+            <Label htmlFor="tip">What&apos;s free here?</Label>
             <Textarea
               id="tip"
               value={tip}

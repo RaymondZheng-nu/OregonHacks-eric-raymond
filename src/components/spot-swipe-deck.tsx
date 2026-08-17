@@ -67,10 +67,7 @@ function formatAmenity(amenity: string): string {
 function useSpotTips(spotId: string | undefined): FreeActivityTip[] {
   const [tips, setTips] = useState<FreeActivityTip[]>([]);
   useEffect(() => {
-    if (!spotId) {
-      setTips([]);
-      return;
-    }
+    if (!spotId) return;
     let cancelled = false;
     getVerifiedTips(spotId).then((result) => {
       if (!cancelled) setTips(result);
@@ -175,11 +172,6 @@ const SHEET_DRAG_THRESHOLD = 60;
 function MobileDetailSheet({ spot, tips }: { spot: Spot; tips: FreeActivityTip[] }) {
   const [expanded, setExpanded] = useState(false);
   const collapsedY = SHEET_HEIGHT_PX - SHEET_PEEK_PX;
-
-  useEffect(() => {
-    // Don't carry an expanded sheet over to the next card after a swipe.
-    setExpanded(false);
-  }, [spot.id]);
 
   function handleDragEnd(_: unknown, info: PanInfo) {
     if (info.offset.y < -SHEET_DRAG_THRESHOLD || info.velocity.y < -400) {
@@ -840,7 +832,9 @@ export function SpotSwipeDeck({
         )}
       </div>
 
-      {topSpot && <MobileDetailSheet spot={topSpot} tips={topSpotTips} />}
+      {topSpot && (
+        <MobileDetailSheet key={topSpot.id} spot={topSpot} tips={topSpotTips} />
+      )}
     </div>
   );
 }

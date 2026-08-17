@@ -21,10 +21,7 @@ export function SpotSearchBox() {
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
-      setResults([]);
-      return;
-    }
+    if (!trimmed) return;
     let cancelled = false;
     const id = setTimeout(() => {
       searchSpots(trimmed).then((next) => {
@@ -53,6 +50,7 @@ export function SpotSearchBox() {
     // client nav would update the URL but leave the map exactly where it was.
     // The existing "View on map" links from / and /spot/[id] only work because
     // they cross routes into a fresh /explore mount — this matches that.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination, react-hooks/immutability -- deliberate hard nav, see comment above
     window.location.href = `/explore?spot=${spot.id}&lat=${spot.lat}&lng=${spot.lng}`;
   }
 
@@ -77,7 +75,7 @@ export function SpotSearchBox() {
           className="pl-7"
         />
       </div>
-      {open && results.length > 0 && (
+      {open && query.trim() && results.length > 0 && (
         <ul className="absolute top-full z-[1100] mt-1 max-h-72 w-full min-w-[240px] overflow-y-auto rounded-md border bg-popover py-1 shadow-md">
           {results.map((spot) => (
             <li key={spot.id}>
